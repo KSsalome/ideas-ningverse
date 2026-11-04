@@ -1,0 +1,16 @@
+'use client';
+import {useState,type CSSProperties} from 'react';
+import {AtSign,MessageCircle,Gamepad2,Globe,ArrowUpRight,Compass,Settings2,Copy,Check,LockKeyhole} from 'lucide-react';
+import type {Project} from '@/lib/shared';
+import BuildingAppearancePreview from './building-appearance-preview';
+export function PlatformIcon({platform,size=24}:{platform:string;size?:number}){
+ if(platform==='instagram')return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.25" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r=".8" fill="currentColor"/></svg>;
+ if(platform==='facebook')return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.25" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="4"/><path d="M14.5 21V12H18l.5-3h-4V7.8c0-1.5.7-2.3 2.3-2.3H19M10 12h8.3"/></svg>;
+ const Icon=({threads:AtSign,line:MessageCircle,game:Gamepad2,other:Globe} as Record<string,typeof Globe>)[platform]??Globe;return <Icon size={size} strokeWidth={1.25}/>;
+}
+export default function SocialRoom({project:p,onWalk,canEdit,onEdit}:{project:Project;onWalk:()=>void;canEdit:boolean;onEdit:()=>void}){
+ const [copied,setCopied]=useState(false),[copyError,setCopyError]=useState('');
+ return <div className={'social-room '+(p.platform==='game'?'gaming-room':'')} style={{'--project-color':p.color} as CSSProperties}><div className="social-hero"><div className="social-orbit"/><div className="social-orbit second"/>{p.islandId==='technology'?<BuildingAppearancePreview project={p} compact/>:<PlatformIcon platform={p.platform} size={72}/>}<span>{p.platform==='game'?'PLAYER PORTAL':'A WINDOW TO MY WORLD'}</span>{p.privacy==='private'&&<span className="private-building-badge"><LockKeyhole size={12}/>城牆內的私藏</span>}</div><div className="social-room-body"><span className="eyebrow">{p.platform==='game'?'READY WHEN YOU ARE':'MEET ME ON THE OTHER SIDE'}</span><h3>{p.title}</h3><p className="pre-wrap">{p.description}</p>{p.accountHandle?<div className="account-handle"><span>{p.accountHandle}</span><button aria-label="複製帳號名稱" onClick={async()=>{try{await navigator.clipboard.writeText(p.accountHandle);setCopied(true);setCopyError('');}catch{setCopyError('無法自動複製，請選取帳號文字複製。');}}}>{copied?<Check size={15}/>:<Copy size={15}/>}</button></div>:<p className="social-pending">帳號名稱等待島主補上。</p>}{copyError&&<p className="form-note">{copyError}</p>}{p.accountUrl?<a className="primary-button" href={p.accountUrl} target="_blank" rel="noopener noreferrer">{p.platform==='game'?'前往遊戲平台':'前往這個帳號'}<ArrowUpRight size={16}/></a>:<button className="primary-button" disabled>帳號連結待設定 <ArrowUpRight size={16}/></button>}
+ {p.items.length>0&&<div className="social-extra-links">{p.items.map(item=><article key={item.id}>{item.type==='text'?<><h4>{item.title}</h4><p className="pre-wrap">{item.body}</p></>:item.src?<a href={item.src} target="_blank" rel="noopener noreferrer">{item.title||'更多內容'}<ArrowUpRight size={14}/></a>:null}</article>)}</div>}
+ </div><div className="room-actions"><button className="secondary-button" onClick={onWalk}>走到這棟建築 <Compass size={15}/></button>{canEdit&&<button className="text-button" onClick={onEdit}>編輯帳號與位置 <Settings2 size={14}/></button>}</div></div>;
+}

@@ -1,0 +1,5 @@
+export const libraryPalette=Object.freeze({ivory:'#d6cbb7',stone:'#b8b6ab',navy:'#233d32',gold:'#a38750',wood:'#3d281e',walnut:'#322119',leaf:'#405a3e',light:'#ffdba2',magic:'#b6c6d2',burgundy:'#4b1b2b',cream:'#e2d7c3',iron:'#222925',ceiling:'#1e2e48',leather:'#413127'});
+export const libraryExterior=Object.freeze({halfWidth:7.6,rear:-7.3,front:2.3,roof:8.65,stepsFront:6.25,stepsBack:2.65,stepsHalfWidth:3.6,stepsHeight:1.12});
+export const libraryGardenObstacles=Object.freeze([{x:-9.2,z:7.2,w:2.8,d:1.15},{x:9.2,z:7.2,w:2.8,d:1.15},{x:-6.4,z:6.4,w:1.3,d:1.3},{x:6.4,z:6.4,w:1.3,d:1.3},...[-1,1].flatMap(s=>[{x:s*9.1,z:3.8,w:1.5,d:1.5},{x:s*9.5,z:-2.8,w:1.3,d:4.8}])]);
+export function libraryOutdoorBlocked(x:number,z:number){const b=libraryExterior;if(Math.abs(x)<b.halfWidth+.3&&z>b.rear-.3&&z<b.front+.3)return true;return libraryGardenObstacles.some(o=>Math.abs(x-o.x)<o.w/2+.25&&Math.abs(z-o.z)<o.d/2+.25);}
+export function libraryStepHeight(x:number,z:number){const b=libraryExterior;if(Math.abs(x)>b.stepsHalfWidth||z<b.stepsBack||z>b.stepsFront)return 0;return b.stepsHeight*(b.stepsFront-z)/(b.stepsFront-b.stepsBack);}

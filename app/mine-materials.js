@@ -1,0 +1,29 @@
+import * as THREE from 'three';
+import {minePalette} from '../lib/mine-style.ts';
+import {masonryTextures} from './home-materials.js';
+
+export function mineMistTexture(){const size=64,data=new Uint8Array(size*size*4);for(let y=0;y<size;y++)for(let x=0;x<size;x++){const r=Math.hypot((x-32)/32,(y-32)/32),alpha=Math.max(0,1-r)**2;data.set([255,255,255,Math.round(alpha*255)],(y*size+x)*4);}const t=new THREE.DataTexture(data,size,size,THREE.RGBAFormat);t.magFilter=t.minFilter=THREE.LinearFilter;t.needsUpdate=true;return t;}
+export function crystalGradientTextures(){
+ const size=32,width=4,color=new Uint8Array(width*size*4),emission=new Uint8Array(width*size*4),levels=[['#210610','#4c0d20','#7c1733','#9c293e','#5a1028'],['#300b18','#68152a','#b93149','#d34a57','#862238'],['#3c1020','#8d2439','#d14853','#ed6a67','#b83f52'],['#54192a','#a33046','#e75b64','#ff9383','#ce5063']],heights=[0,.22,.57,.76,1];
+ for(let band=0;band<width;band++)for(let y=0;y<size;y++){const t=y/(size-1),right=heights.findIndex(h=>h>=t),b=Math.max(1,right),a=Math.max(0,right-1),c=new THREE.Color(levels[band][a]).lerp(new THREE.Color(levels[band][b]),(t-heights[a])/(heights[b]-heights[a])).convertLinearToSRGB(),offset=(y*width+band)*4;color.set([Math.round(c.r*255),Math.round(c.g*255),Math.round(c.b*255),255],offset);const core=Math.round((.06+.7*Math.sin(t*Math.PI)**2)*(.55+band*.15)*255);emission.set([core,core,core,255],offset);}
+ const texture=(data,srgb=false)=>{const t=new THREE.DataTexture(data,width,size,THREE.RGBAFormat);t.minFilter=t.magFilter=THREE.LinearFilter;t.colorSpace=srgb?THREE.SRGBColorSpace:THREE.NoColorSpace;t.needsUpdate=true;return t;};return{map:texture(color,true),emissiveMap:texture(emission)};
+}
+export function mineGlowTexture(rectangular=false){const size=64,data=new Uint8Array(size*size*4);for(let y=0;y<size;y++)for(let x=0;x<size;x++){const nx=Math.abs((x-31.5)/31.5),ny=Math.abs((y-31.5)/31.5),d=rectangular?Math.hypot(Math.max(0,nx-.32)/.68,Math.max(0,ny-.43)/.57):Math.hypot(nx,ny),alpha=Math.max(0,1-d)**2;data.set([255,255,255,Math.round(alpha*255)],(y*size+x)*4);}const texture=new THREE.DataTexture(data,size,size,THREE.RGBAFormat);texture.minFilter=texture.magFilter=THREE.LinearFilter;texture.needsUpdate=true;return texture;}
+export default function mineMaterials({lowDetail=false,phase='gothic'}={}){
+ const night=['cyber','gothic','wonder'].includes(phase),role=(m,name)=>{m.name='mine-'+name;m.userData.mineRole=name;m.userData.bloom=false;return m;};
+ const solid=(color,name,extra={})=>role(lowDetail?new THREE.MeshLambertMaterial({color}):new THREE.MeshStandardMaterial({color,roughness:.86,metalness:0,flatShading:true,...extra}),name);
+ const rock=[minePalette.rock,minePalette.rockShade,'#46404a','#39313d'].map(color=>solid(color,'faceted-rock'));
+ const body=solid('#19151f','black-gothic-wall'),roof=solid(minePalette.navy,'purple-black-roof'),wood=solid(minePalette.wood,'dark-timber'),woodEdge=solid('#72503b','timber-edge'),iron=solid(minePalette.iron,'iron',{roughness:.52,metalness:.65}),bronze=solid(minePalette.gold,'antique-bronze',{roughness:.48,metalness:.64});
+ const paving=solid('#403944','charcoal-paving',lowDetail?{}:{...masonryTextures('paving'),normalScale:new THREE.Vector2(.32,.32)});
+ const glow=(color,name,power=1.3)=>{const m=role(new THREE.MeshBasicMaterial({color,toneMapped:true}),name);if(!lowDetail)m.color.multiplyScalar(power);m.userData.bloom=true;m.userData.lightColor=color;return m;};
+ const warm=glow(minePalette.light,'warm-lamp-core'),ruby=glow('#ec667b','small-crystal-vein',1.4),violet=glow(minePalette.magic,'violet-magic-core',1.3),cardRune=glow('#c9a2ff','tarot-purple-rune',2.4);
+ const gradient=lowDetail?null:crystalGradientTextures();
+ const fallbackColors=[['#300918','#61142b','#8a263c'],['#501020','#942039','#bc394b'],['#6d1a30','#b3344b','#df5c61'],['#8a2139','#d94d5d','#f9867e']];
+ const crystal=fallbackColors[0].map((color,n)=>role(lowDetail?new THREE.MeshLambertMaterial({color,emissive:new THREE.Color('#8a1e39').multiplyScalar(.05)}):new THREE.MeshPhysicalMaterial({color:['#c8aab6','#ffffff','#e9c9d2'][n],...gradient,roughness:.34,metalness:.08,clearcoat:.28,clearcoatRoughness:.28,flatShading:true,emissive:'#d9465d',emissiveIntensity:night?.34:.23}),'crimson-crystal'));
+ const crystalByElevation=fallbackColors.map((colors,band)=>!lowDetail||band===0?crystal:colors.map(color=>role(new THREE.MeshLambertMaterial({color,emissive:new THREE.Color('#a32b47').multiplyScalar(.05+band*.018)}),'crimson-crystal')));
+ const majorCrystal=crystal.map((material,n)=>{const c=role(material.clone(),'glowing-summit-crystal');if(lowDetail){c.color.set(fallbackColors[3][n]);c.emissive.set('#e75d72').multiplyScalar(.19);}else{c.emissive.set('#ff4a68');c.emissiveIntensity=night?.95:.75;}return c;});
+ const cardAura=role(new THREE.MeshBasicMaterial({color:'#a060ef',map:lowDetail?null:mineGlowTexture(true),transparent:true,opacity:lowDetail?.18:.32,blending:THREE.AdditiveBlending,depthWrite:false,side:THREE.DoubleSide}),'purple-card-aura');
+ const summitAura=role(lowDetail?new THREE.MeshBasicMaterial({color:'#e65271',transparent:true,opacity:.14,depthWrite:false,side:THREE.DoubleSide}):new THREE.SpriteMaterial({color:'#ff516c',map:mineGlowTexture(),transparent:true,opacity:.24,blending:THREE.AdditiveBlending,depthWrite:false}),'red-summit-aura');
+ const glass=role(lowDetail?new THREE.MeshLambertMaterial({color:'#735d4b',emissive:new THREE.Color(minePalette.light).multiplyScalar(.18)}):new THREE.MeshPhysicalMaterial({color:'#342c35',roughness:.32,metalness:.06,clearcoat:.3,emissive:minePalette.light,emissiveIntensity:night?.25:.15}),'recessed-window');
+ return{night,rock,body,roof,wood,woodEdge,iron,bronze,paving,warm,ruby,violet,cardRune,cardAura,summitAura,crystal,crystalByElevation,majorCrystal,glass};
+}

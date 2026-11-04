@@ -1,0 +1,30 @@
+import {seeded} from './art-kit.js';
+import * as THREE from 'three';
+import {worldNight,deepNight,royalDay,fairyDawn} from '../lib/world-night.ts';
+
+// A single, small canvas shared across all seven islands. It sits behind the
+// transparent renderer; no sky meshes, particles or extra rendering pass.
+export default function worldNightSky({container,mix=0,depth=0,noon=0,dawn=0,progress=0}){
+ const canvas=document.createElement('canvas'),ctx=canvas.getContext('2d'),rng=seeded(1723),stars=Array.from({length:48},()=>({x:rng(),y:rng()*.74,r:.45+rng()*.65,seed:rng()*6})),clouds=Array.from({length:6},()=>({x:rng(),y:.2+rng()*.65,r:.14+rng()*.11}));
+ canvas.className='world-night-sky';canvas.setAttribute('aria-hidden','true');canvas.dataset.scope='all-islands';Object.assign(canvas.style,{position:'absolute',inset:'0',width:'100%',height:'100%',pointerEvents:'none',opacity:String(mix)});container.insertBefore(canvas,container.querySelector('canvas:not(.home-local-sky),svg'));let w=1,h=1,last=-Infinity,painted=false,dirty=true;
+ const nightColors=worldNight.sky.map(c=>new THREE.Color(c)),deepColors=deepNight.sky.map(c=>new THREE.Color(c)),dayColors=royalDay.sky.map(c=>new THREE.Color(c)),dawnColors=fairyDawn.sky.map(c=>new THREE.Color(c)),lateColors=fairyDawn.lateSky.map(c=>new THREE.Color(c)),dawnColor=new THREE.Color(),color=new THREE.Color();
+ function resize(width,height){const scale=Math.min(1,768/Math.max(width,height));w=canvas.width=Math.max(1,Math.round(width*scale));h=canvas.height=Math.max(1,Math.round(height*scale));painted=false;}
+ function update(now,reduced=false){const coverage=mix+noon+dawn;if(coverage<=0||painted&&(now-last<140||reduced&&!dirty))return;last=now;painted=true;dirty=false;const deep=mix>0?depth/mix:0,day=noon/coverage,night=mix/coverage,morning=dawn/coverage,t=reduced?0:now*(1-deep*.55);
+  const sky=ctx.createLinearGradient(0,0,0,h);nightColors.forEach((c,n)=>{color.copy(c).lerp(deepColors[n],deep);dawnColor.copy(dawnColors[n]).lerp(lateColors[n],progress);color.setRGB(color.r*night+dayColors[n].r*day+dawnColor.r*morning,color.g*night+dayColors[n].g*day+dawnColor.g*morning,color.b*night+dayColors[n].b*day+dawnColor.b*morning);sky.addColorStop(n/2,color.getStyle());});ctx.fillStyle=sky;ctx.fillRect(0,0,w,h);
+  for(const [n,s]of stars.entries()){ctx.globalAlpha=(night+(n<12?morning*(1-progress)**2*.16:0))*(.25+(.5+.5*Math.sin(t*.00065+s.seed))*.5)*(1-deep*.28)*(n%3?1:1-deep);ctx.fillStyle='#dce8f5';ctx.beginPath();ctx.arc(s.x*w,s.y*h,s.r,0,Math.PI*2);ctx.fill();}ctx.globalAlpha=night;
+  const x=w*.78,y=h*.17,r=Math.min(w,h)*.026,g=ctx.createRadialGradient(x,y,r,x,y,r*4);g.addColorStop(0,'rgba(196,211,238,.17)');g.addColorStop(1,'rgba(196,211,238,0)');ctx.fillStyle=g;ctx.fillRect(x-r*4,y-r*4,r*8,r*8);ctx.fillStyle='#cfdaea';ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);ctx.fill();
+  for(const c of clouds){const x=((c.x+t*.0000014)%1.4-.2)*w,y=c.y*h,r=c.r*w,g=ctx.createRadialGradient(x,y,0,x,y,r);g.addColorStop(0,`rgba(132,141,170,${.055-.015*deep})`);g.addColorStop(1,'rgba(132,141,170,0)');ctx.save();ctx.translate(0,y*.65);ctx.scale(1,.35);ctx.fillStyle=g;ctx.fillRect(x-r,y-r,r*2,r*2);ctx.restore();}
+  ctx.globalAlpha=1;
+  if(day>0){ctx.globalAlpha=day*.75;ctx.fillStyle='#fff5db';ctx.beginPath();ctx.arc(w*.72,h*.11,Math.min(w,h)*.022,0,Math.PI*2);ctx.fill();for(const [n,c]of clouds.entries()){const x=((c.x+t*.000002)%1.35-.15)*w,y=(.12+c.y*.58)*h,r=Math.min(w*.12,52)*(1+c.r);ctx.globalAlpha=day*(.24+(n%3)*.06);ctx.fillStyle='#fffefa';ctx.beginPath();ctx.ellipse(x,y,r*1.8,r*.3,0,0,Math.PI*2);ctx.ellipse(x-r*.44,y-r*.13,r*.65,r*.42,0,0,Math.PI*2);ctx.ellipse(x+r*.35,y-r*.16,r*.83,r*.39,0,0,Math.PI*2);ctx.fill();}ctx.globalAlpha=1;}
+  if(morning>0){
+   const horizon=ctx.createLinearGradient(0,h*.43,0,h);horizon.addColorStop(0,'rgba(255,227,196,0)');horizon.addColorStop(.65,`rgba(255,229,197,${morning*(.08+.05*progress)})`);horizon.addColorStop(1,`rgba(244,230,220,${morning*.06})`);ctx.fillStyle=horizon;ctx.fillRect(0,h*.43,w,h*.57);
+   const x=w*.74,y=h*(.78-progress*.12),r=Math.min(w,h)*.038,halo=ctx.createRadialGradient(x,y,0,x,y,r*4.5);halo.addColorStop(0,`rgba(255,229,193,${morning*.17})`);halo.addColorStop(1,'rgba(255,229,193,0)');ctx.fillStyle=halo;ctx.fillRect(x-r*4.5,y-r*4.5,r*9,r*9);
+   for(const [n,c]of clouds.entries()){const x=((c.x+t*.0000012)%1.35-.15)*w,y=(.28+c.y*.7)*h,r=Math.min(w*.16,70);ctx.globalAlpha=morning*(.12+n%2*.045);ctx.fillStyle=n%2?'#f5e2df':'#e8e2f1';ctx.beginPath();ctx.ellipse(x,y,r*1.9,r*.22,0,0,Math.PI*2);ctx.ellipse(x-r*.35,y-r*.1,r*.9,r*.3,0,0,Math.PI*2);ctx.fill();}
+   // Six tiny faraway glints only, painted behind the scene and all controls.
+   for(let n=0;n<6;n++){const s=stars[n],y=(.5+s.y*.5)*h+Math.sin(t*.00012+s.seed)*2;ctx.globalAlpha=morning*.15;ctx.fillStyle='#fff2df';ctx.beginPath();ctx.arc(s.x*w,y,.65,0,Math.PI*2);ctx.fill();}ctx.globalAlpha=1;
+  }
+  // Low mist is behind the geometry and cannot cover controls or entrances.
+  if(deep>0){const mist=ctx.createLinearGradient(0,h*.68,0,h);mist.addColorStop(0,'rgba(113,126,144,0)');mist.addColorStop(1,`rgba(113,126,144,${deep*night*.055})`);ctx.fillStyle=mist;ctx.fillRect(0,h*.68,w,h*.32);}
+ }
+ return{resize,update,setMix(value,deep=0,day=0,morning=0,time=0){const next=THREE.MathUtils.clamp(value,0,1),nextDepth=THREE.MathUtils.clamp(deep,0,next),nextNoon=THREE.MathUtils.clamp(day,0,1-next),nextDawn=THREE.MathUtils.clamp(morning,0,1-next-nextNoon),nextProgress=THREE.MathUtils.clamp(time,0,1);if(next!==mix||nextDepth!==depth||nextNoon!==noon||nextDawn!==dawn||nextProgress!==progress)dirty=true;mix=next;depth=nextDepth;noon=nextNoon;dawn=nextDawn;progress=nextProgress;canvas.style.opacity=String(mix+noon+dawn);canvas.style.visibility=mix+noon+dawn>0?'visible':'hidden';canvas.dataset.nightMix=mix.toFixed(3);canvas.dataset.nightDepth=depth.toFixed(3);canvas.dataset.noonMix=noon.toFixed(3);canvas.dataset.dawnMix=dawn.toFixed(3);canvas.dataset.dawnProgress=progress.toFixed(4);},dispose(){canvas.remove();}};
+}

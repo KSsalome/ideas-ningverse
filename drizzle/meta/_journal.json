@@ -1,0 +1,34 @@
+{
+  "version": "7",
+  "dialect": "sqlite",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "6",
+      "when": 1793039675352,
+      "tag": "0000_ordinary_guardsmen",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1793064295308,
+      "tag": "0001_cloudy_xorn",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1793073366767,
+      "tag": "0002_classy_banshee",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1793084324190,
+      "tag": "0003_real_secret_warriors",
+      "breakpoints": true
+    }
+  ]
+}

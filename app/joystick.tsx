@@ -1,0 +1,5 @@
+'use client';
+import {useRef,useState} from 'react';
+import {Compass} from 'lucide-react';
+export default function Joystick({onMove}:{onMove:(x:number,z:number)=>void}){const ref=useRef<HTMLDivElement>(null),[offset,setOffset]=useState({x:0,y:0});function move(e:React.PointerEvent){if(!e.currentTarget.hasPointerCapture(e.pointerId))return;const r=ref.current!.getBoundingClientRect(),dx=(e.clientX-r.left-r.width/2)/31,dy=(e.clientY-r.top-r.height/2)/31,n=Math.max(1,Math.hypot(dx,dy));setOffset({x:dx/n*24,y:dy/n*24});onMove(dx/n,dy/n);}function reset(){setOffset({x:0,y:0});onMove(0,0);}return <div className="joystick-wrap"><div ref={ref} className="joystick" role="group" aria-label="拖曳搖桿行走，也可點地面移動" onPointerDown={e=>{e.currentTarget.setPointerCapture(e.pointerId);move(e);}} onPointerMove={move} onPointerUp={reset} onPointerCancel={reset} onLostPointerCapture={reset}><span className="joystick-cross">＋</span><span className="joystick-knob" style={{transform:`translate(${offset.x}px,${offset.y}px)`}}><Compass size={21} strokeWidth={1.1}/></span></div><span>拖曳行走</span></div>;}
+
