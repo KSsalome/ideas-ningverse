@@ -17,3 +17,16 @@ export const wardrobes=sqliteTable('wardrobes',{actor:text('actor').primaryKey()
 export const artworks=sqliteTable('artworks',{id:text('id').primaryKey(),galleryId:text('gallery_id').notNull(),data:text('data').notNull(),updatedAt:text('updated_at').notNull()},t=>[index('artworks_gallery_idx').on(t.galleryId)]);
 export const petFeathers=sqliteTable('pet_feathers',{actor:text('actor').notNull(),day:text('day').notNull(),acquiredAt:integer('acquired_at').notNull()},t=>[primaryKey({columns:[t.actor,t.day]})]);
 export const rewardCatalog=sqliteTable('reward_catalog',{id:text('id').primaryKey(),data:text('data').notNull(),updatedAt:text('updated_at').notNull()});
+
+// Google OAuth 的單次驗證資料，十分鐘後過期。
+export const authRequests = sqliteTable('auth_requests', {
+ stateHash: text('state_hash').primaryKey(), verifier: text('verifier').notNull(),
+ nonce: text('nonce').notNull(), returnTo: text('return_to').notNull(),
+ origin: text('origin').notNull(), ipHash: text('ip_hash').notNull(),
+ expiresAt: integer('expires_at').notNull(),
+}, t => [index('auth_requests_expiry_idx').on(t.expiresAt), index('auth_requests_ip_idx').on(t.ipHash)]);
+// 伺服器端工作階段，僅保存 cookie 憑證的雜湊，支援立即登出。
+export const authSessions = sqliteTable('auth_sessions', {
+ tokenHash: text('token_hash').primaryKey(), userId: text('user_id').notNull(),
+ name: text('name').notNull(), email: text('email').notNull(), expiresAt: integer('expires_at').notNull(),
+}, t => [index('auth_sessions_expiry_idx').on(t.expiresAt)]);

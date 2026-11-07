@@ -29,6 +29,13 @@
       "when": 1793084324190,
       "tag": "0003_real_secret_warriors",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1794054476366,
+      "tag": "0004_harsh_proemial_gods",
+      "breakpoints": true
     }
   ]
 }

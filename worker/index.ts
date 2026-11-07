@@ -1,9 +1,13 @@
+import { googleAuthRoute } from "../lib/google-auth";
 import handler from "vinext/server/fetch-handler";
 import { runWithConnectorBinding } from "../lib/connector-context";
 import type { ConnectorBinding } from "../lib/connector-contract.mjs";
 
 const worker = {
-  fetch(request: Request, env: Cloudflare.Env, ctx: ExecutionContext<{ CONNECTORS?: ConnectorBinding }>) {
+  async fetch(request: Request, env: Cloudflare.Env, ctx: ExecutionContext<{ CONNECTORS?: ConnectorBinding }>) {
+    // OAuth 在伺服器端處理；一般頁面沿用既有 Vinext 入口。
+    const authResponse = await googleAuthRoute(request, env, import.meta.env.DEV);
+    if (authResponse) return authResponse;
     let binding = ctx.props?.CONNECTORS;
     // Local preview emulates the same request-scoped capability. This branch and
     // the auxiliary service binding are absent from production builds.

@@ -1,3 +1,4 @@
+import {createHash} from 'node:crypto';
 import {createRequire} from 'node:module';
 import {readFile,readdir} from 'node:fs/promises';
 import path from 'node:path';
@@ -8,12 +9,20 @@ const root=path.resolve('dist/server');
 const entries=await readdir(root,{recursive:true,withFileTypes:true});
 const paths=entries.filter(e=>e.isFile()&&/\.m?js$/.test(e.name)).map(e=>path.join(e.parentPath,e.name));
 const modules=[path.join(root,'index.js'),...paths.filter(p=>p!==path.join(root,'index.js'))].map(p=>({type:'ESModule',path:p}));
-const mf=new Miniflare({modules,modulesRoot:root,compatibilityDate:'2026-05-15',compatibilityFlags:['nodejs_compat'],d1Databases:{DB:'island-integration-test'},r2Buckets:['BUCKET'],bindings:{SETUP_TOKEN:'local-preview-setup-only',SESSION_SECRET:'local-unit-test-session-secret'},assets:{directory:path.resolve('dist/client'),routerConfig:{has_user_worker:true,invoke_user_worker_ahead_of_assets:true}},cf:false,inspectorPort:0});
+const mf=new Miniflare({modules,modulesRoot:root,compatibilityDate:'2026-05-15',compatibilityFlags:['nodejs_compat'],d1Databases:{DB:'island-integration-test'},r2Buckets:['BUCKET'],bindings:{AUTH_ORIGIN:'https://island.test',SETUP_TOKEN:'local-preview-setup-only',SESSION_SECRET:'local-unit-test-session-secret'},assets:{directory:path.resolve('dist/client'),routerConfig:{has_user_worker:true,invoke_user_worker_ahead_of_assets:true}},cf:false,inspectorPort:0});
+// 整合測試使用固定且只存在隔離資料庫的 session。
+const ownerSession='__Host-ningverse_session='+createHash('sha256').update('owner-test').digest('base64url');
 let cookie='';
 async function call(route,{method='GET',data,who,gate=false,status=200}={}){
  const headers={Origin:'https://island.test'};
- if(who){headers['oai-authenticated-user-id']=who;headers['oai-authenticated-user-email']=who+'@example.invalid';}
- if(gate)headers.Cookie=cookie;
+ // 以伺服器資料庫內的有效 session 模擬已登入帳號，外來身分標頭不再授權。
+ if(who){
+  const raw=createHash('sha256').update(who).digest('base64url');
+  const db=await mf.getD1Database('DB');
+  await db.prepare('INSERT OR REPLACE INTO auth_sessions(token_hash,user_id,name,email,expires_at) VALUES(?,?,?,?,?)').bind(createHash('sha256').update(raw).digest('hex'),who,who,who+'@example.invalid',Date.now()+3600000).run();
+  headers.Cookie='__Host-ningverse_session='+raw;
+ }
+ if(gate)headers.Cookie=[headers.Cookie,cookie].filter(Boolean).join('; ');
  if(data!==undefined)headers['Content-Type']='application/json';
  const r=await mf.dispatchFetch('https://island.test'+route,{method,headers,body:data===undefined?undefined:JSON.stringify(data)});
  const text=await r.text();assert.equal(r.status,status,route+': '+text.slice(0,300));
@@ -33,6 +42,9 @@ try{
  await call('/api/island/setup',{method:'POST',who:'owner-test',data:{token:'wrong',password:'only-a-local-test-password'},status:403});
  await call('/api/island/setup',{method:'POST',who:'owner-test',data:{token:'local-preview-setup-only',password:'only-a-local-test-password'}});
  assert.ok((await call('/api/island/world',{who:'owner-test',gate:true})).viewer.unlocked);
+ // 偽造原 Sites 標頭與城門 cookie，仍不能冒用 Google 島主工作階段。
+ const spoofed=await mf.dispatchFetch('https://island.test/api/island/diaries',{headers:{'oai-authenticated-user-id':'owner-test','oai-authenticated-user-email':'owner-test@example.invalid',Cookie:cookie}});
+ assert.equal(spoofed.status,403);
  const inner=await call('/api/island/world',{who:'owner-test',gate:true});assert.equal(inner.projects.length,28);
  let privateFB=inner.projects.find(p=>p.id==='facebook-private');assert.equal(privateFB.privacy,'private');
  privateFB=(await call('/api/island/projects',{method:'POST',who:'owner-test',gate:true,data:{...privateFB,accountHandle:'qa-private-handle',accountUrl:'https://facebook.com/qa-private-account'}})).project;
@@ -57,15 +69,15 @@ try{
  assert.equal((await call('/api/island/world',{who:'visitor-test'})).avatar.name,avatar.name);
  assert.equal((await call('/api/island/world',{who:'another-test'})).avatar,null);
  const form=new FormData();form.set('scope','private');form.set('file',new File([Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jU1sAAAAASUVORK5CYII=','base64')],'private.png',{type:'image/png'}));
- const uploadRequest=new Request('https://island.test/api/island/upload',{method:'POST',headers:{Origin:'https://island.test','oai-authenticated-user-id':'owner-test','oai-authenticated-user-email':'owner-test@example.invalid',Cookie:cookie},body:form});
+ const uploadRequest=new Request('https://island.test/api/island/upload',{method:'POST',headers:{Origin:'https://island.test','oai-authenticated-user-id':'owner-test','oai-authenticated-user-email':'owner-test@example.invalid',Cookie:cookie+'; '+ownerSession},body:form});
  const upload=await mf.dispatchFetch(uploadRequest.url,{method:'POST',headers:Object.fromEntries(uploadRequest.headers),body:await uploadRequest.arrayBuffer()});
  assert.equal(upload.status,200);const asset=await upload.json();
  await call(asset.url,{status:403});
- const privateImage=await mf.dispatchFetch('https://island.test'+asset.url,{headers:{'oai-authenticated-user-id':'owner-test','oai-authenticated-user-email':'owner-test@example.invalid',Cookie:cookie}});assert.equal(privateImage.status,200);await privateImage.arrayBuffer();
+ const privateImage=await mf.dispatchFetch('https://island.test'+asset.url,{headers:{'oai-authenticated-user-id':'owner-test','oai-authenticated-user-email':'owner-test@example.invalid',Cookie:cookie+'; '+ownerSession}});assert.equal(privateImage.status,200);await privateImage.arrayBuffer();
  const diary={id:'test-diary',date:'2026-10-27',title:'本機測試',body:'測試資料不會進入正式網站',mood:'平靜',images:[asset.url]};
  await call('/api/island/diaries',{method:'POST',who:'owner-test',gate:true,data:diary});
  assert.equal((await call('/api/island/diaries',{who:'owner-test',gate:true})).diaries[0].body,diary.body);
- const exported=await mf.dispatchFetch('https://island.test/api/island/export',{headers:{Origin:'https://island.test','oai-authenticated-user-id':'owner-test','oai-authenticated-user-email':'owner-test@example.invalid',Cookie:cookie}});
+ const exported=await mf.dispatchFetch('https://island.test/api/island/export',{headers:{Origin:'https://island.test','oai-authenticated-user-id':'owner-test','oai-authenticated-user-email':'owner-test@example.invalid',Cookie:cookie+'; '+ownerSession}});
  assert.equal(exported.status,200);assert.equal(exported.headers.get('Content-Type'),'application/zip');
  const {unzipSync,strFromU8}=createRequire(import.meta.url)('fflate');const zip=unzipSync(new Uint8Array(await exported.arrayBuffer()));assert.equal(JSON.parse(strFromU8(zip['diaries.json'])).diaries[0].id,diary.id);
  await call('/api/island/export',{who:'visitor-test',gate:true,status:403});
