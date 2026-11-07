@@ -1,0 +1,32 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+
+  // 自行管理的 Cloudflare 帳號與網站名稱。
+  "name": "ideas-ningverse",
+  "account_id": "d8862109106e79fab06becba71e5d069",
+  "main": "./worker/index.ts",
+
+  // 固定執行環境的相容日期，搭配目前專案使用的工具版本。
+  "compatibility_date": "2026-05-15",
+  "compatibility_flags": ["nodejs_compat"],
+
+  // D1：保存作品、留言、角色與收藏紀錄。
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "ideas-ningverse-db",
+      "database_id": "4e1464fe-96ab-413b-818f-620785fb07e3",
+
+      // 使用專案既有的四份 SQL 資料表腳本。
+      "migrations_dir": "drizzle"
+    }
+  ],
+
+  // R2：保存圖片、影片與作品附件。
+  "r2_buckets": [
+    {
+      "binding": "BUCKET",
+      "bucket_name": "ideas-ningverse-assets"
+    }
+  ]
+}
