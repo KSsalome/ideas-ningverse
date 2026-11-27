@@ -3,7 +3,7 @@ import {wearableHair,addWearables,animateWearables} from './avatar-wearables.js'
 export {animateWearables};
 import {RoundedBoxGeometry} from 'three/addons/geometries/RoundedBoxGeometry.js';
 export default function makeAvatar(data,cosmetics={},lowDetail=false){
- const g=new THREE.Group(),m=(color,extra={})=>new THREE.MeshStandardMaterial({color,roughness:.85,...extra}),skin=m(data.skin),hair=m(cosmetics.hairColor??data.hair),dark=m('#27334a'),gold=m('#c5af82',{metalness:.4});
+ const g=new THREE.Group();g.userData.keepShadow=true;const m=(color,extra={})=>new THREE.MeshStandardMaterial({color,roughness:.85,...extra}),skin=m(data.skin),hair=m(cosmetics.hairColor??data.hair),dark=m('#27334a'),gold=m('#c5af82',{metalness:.4});
  const outfitColor=cosmetics.outfit==='tavern-waistcoat'?'#e9dfc8':cosmetics.outfitColor??({'forest-cape':'#698c76','moon-coat':'#d1c7d6','neon-jacket':'#405d74'})[cosmetics.outfit]??data.outfit,coat=m(outfitColor);
  const mesh=(geo,mat,x=0,y=0,z=0)=>{const o=new THREE.Mesh(geo,mat);o.position.set(x,y,z);o.castShadow=true;g.add(o);return o;},box=(w,h,d,mat,x,y,z)=>mesh(new THREE.BoxGeometry(w,h,d),mat,x,y,z),ball=(r,mat,x,y,z,sx=1,sy=1,sz=1)=>{const o=mesh(new THREE.SphereGeometry(r,lowDetail?8:20,lowDetail?5:14),mat,x,y,z);o.scale.set(sx,sy,sz);return o;},cyl=(r,h,mat,x,y,z)=>mesh(new THREE.CylinderGeometry(r,r,h,8),mat,x,y,z);
  const body=mesh(lowDetail?new THREE.BoxGeometry(.47,cosmetics.outfit==='moon-coat'?.84:.61,.31):new RoundedBoxGeometry(.47,cosmetics.outfit==='moon-coat'?.84:.61,.31,2,.045),coat,0,.84,0);box(.11,.41,.025,m('#e8e0ce'),0,.91,.17);for(const x of [-.11,.11]){const collar=box(.13,.15,.025,m('#f1e9da'),x,1.1,.18);collar.rotation.z=x<0?-.42:.42;}for(const y of [.72,.88,1.02])ball(.017,gold,.06,y,.18);

@@ -9,8 +9,9 @@ export const phases: Record<Phase,{name:string;subtitle:string;range:string;acce
  cyber:{name:'霓光',subtitle:'入夜之後，未完成的夢也會發光。',range:'17:00—23:00',accent:'#c9b381',sky:'#17283f',water:'#1e3651',land:'#939faf',wall:'#d8dce0',roof:'#203858',light:'#b6eaff'},
  gothic:{name:'夜薔',subtitle:'萬物安靜下來，Eight來Eight好玩。',range:'23:00—04:00',accent:'#bd9f74',sky:'#161d32',water:'#27304a',land:'#928f9b',wall:'#c5bfc1',roof:'#292b48',light:'#ffda9c'},
 };
+const taipeiHour = new Intl.DateTimeFormat('en-GB',{timeZone:'Asia/Taipei',hour:'2-digit',hourCycle:'h23'});
 export function phaseAt(date=new Date()): Phase {
- const h=Number(new Intl.DateTimeFormat('en-GB',{timeZone:'Asia/Taipei',hour:'2-digit',hourCycle:'h23'}).format(date));
+ const h=Number(taipeiHour.format(date));
  return h>=4&&h<8?'wonder':h>=8&&h<11?'forest':h>=11&&h<14?'medieval':h>=14&&h<17?'industrial':h>=17&&h<23?'cyber':'gothic';
 }
 export const states={unconfigured:'進度待設定',foundation:'蓋地基',building:'建築中',complete:'完工'};

@@ -1,3 +1,4 @@
+import {trackLocalLights} from './scene-performance.js';
 import * as THREE from 'three';
 import libraryKit from './library-kit.js';
 import {libraryExterior as bounds,libraryGardenObstacles} from '../lib/library-style.ts';
@@ -40,8 +41,8 @@ export default function createLibraryIsland({root,island,projects=[],phase='medi
  const nearBridge=(x,z)=>bridgeSegments().some(({a,b})=>Math.min(Math.hypot(island.x+x-a.x,island.z+z-a.z),Math.hypot(island.x+x-b.x,island.z+z-b.z))<4.1);
  for(let n=0;n<40;n++){const a=n/40*TAU,b=(n+1)/40*TAU,x=Math.sin(a)*island.rx*.94,z=Math.cos(a)*island.rz*.94,xx=Math.sin(b)*island.rx*.94,zz=Math.cos(b)*island.rz*.94;if(nearBridge(x,z)||nearBridge(xx,zz))continue;line([[x,1.05,z],[xx,1.05,zz]],m.bronze,root,.035);line([[x,.36,z],[xx,.36,zz]],m.iron,root,.022);for(let j=0;j<4;j++){const t=j/4;cyl(.025,.025,.93,m.iron,root,x+(xx-x)*t,.57,z+(zz-z)*t,4);}if(n%5===0){const lamp=k.lamp(root,x,0,z,3.1);sources.push({object:lamp,point:new THREE.Vector3(0,3,0),power:14});}if(n%4===0){const paver=box(.65,.025,1.15,m.iron,root,x*.88,.065,z*.88);paver.rotation.y=-a;}}
  if(!lowDetail)for(let n=0;n<4;n++){const light=new THREE.PointLight(k.palette.light,12,8,2);light.name='library-bounded-warm-light';light.castShadow=false;root.add(light);lights.push(light);}
- let lastX=Infinity,lastZ=Infinity;
- function updateLights(target){if(!lights.length||Math.hypot(target.x-lastX,target.z-lastZ)<.8)return;lastX=target.x;lastZ=target.z;const enabled=Math.hypot(target.x-island.x,target.z-island.z)<island.rx+22,ranked=sources.map(s=>({...s,world:s.object.localToWorld(s.point.clone())})).sort((a,b)=>Math.hypot(a.world.x-target.x,a.world.z-target.z)-Math.hypot(b.world.x-target.x,b.world.z-target.z)),selected=[...ranked.filter(s=>s.interior),...ranked.filter(s=>!s.interior)];lights.forEach((light,n)=>{const source=selected[n];light.visible=enabled&&!!source;if(source){light.position.copy(root.worldToLocal(source.world));light.intensity=source.power;}});}
+ const refreshLights=trackLocalLights(lights,island,island.rx+22,.8);
+ function updateLights(target){if(!refreshLights(target))return;const ranked=sources.map(s=>({...s,world:s.object.localToWorld(s.point.clone())})).sort((a,b)=>Math.hypot(a.world.x-target.x,a.world.z-target.z)-Math.hypot(b.world.x-target.x,b.world.z-target.z)),selected=[...ranked.filter(s=>s.interior),...ranked.filter(s=>!s.interior)];lights.forEach((light,n)=>{const source=selected[n];light.visible=!!source;if(source){light.position.copy(root.worldToLocal(source.world));light.intensity=source.power;}});}
  function proxy(parent){platform(parent,{proxy:true});for(const p of projects){const q=positionOf(p),g=group(parent,q.x,0,q.z);building(g,p,{proxy:true});}return parent;}
  return{kit:k,materials:m,building,proxy,lamp:k.lamp,updateLights,update:k.update,dispose(){owned.forEach(g=>g.dispose());k.dispose();}};
 }

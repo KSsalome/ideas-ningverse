@@ -1,3 +1,4 @@
+import {trackLocalLights} from './scene-performance.js';
 import * as THREE from 'three';
 import museumKit from './museum-kit.js';
 import {seeded} from './art-kit.js';
@@ -49,6 +50,6 @@ export default function createMuseumIsland({root,island,projects=[],phase='medie
  platform(root);const nearBridge=(x,z)=>bridgeSegments().some(({a,b})=>Math.min(Math.hypot(island.x+x-a.x,island.z+z-a.z),Math.hypot(island.x+x-b.x,island.z+z-b.z))<3.8);
  for(let n=0;n<40;n++){const a=n/40*TAU,b=(n+1)/40*TAU,x=Math.sin(a)*14.15,z=Math.cos(a)*14.15,xx=Math.sin(b)*14.15,zz=Math.cos(b)*14.15;if(nearBridge(x,z)||nearBridge(xx,zz))continue;k.rail(root,[x,.04,z],[xx,.04,zz],{spacing:lowDetail?.7:.48});if(n%7===0){const lamp=k.lamp(root,x,0,z,2.8);sources.push({object:lamp,point:new THREE.Vector3(0,2.7,0),power:11});}}
  if(!lowDetail)for(let n=0;n<4;n++){const light=new THREE.PointLight(k.palette.light,12,7,2);light.name='museum-bounded-garden-light';light.castShadow=false;root.add(light);lights.push(light);}
- let lastX=Infinity,lastZ=Infinity;function updateLights(target){if(!lights.length||Math.hypot(target.x-lastX,target.z-lastZ)<.8)return;lastX=target.x;lastZ=target.z;const ranked=sources.map(s=>({...s,world:s.object.localToWorld(s.point.clone())})).sort((a,b)=>a.world.distanceTo(target)-b.world.distanceTo(target));lights.forEach((light,n)=>{const s=ranked[n];light.visible=!!s&&Math.hypot(target.x-island.x,target.z-island.z)<37;if(s){light.position.copy(root.worldToLocal(s.world));light.intensity=s.power;}});}
+ const refreshLights=trackLocalLights(lights,island,37,.8);function updateLights(target){if(!refreshLights(target))return;const ranked=sources.map(s=>({...s,world:s.object.localToWorld(s.point.clone())})).sort((a,b)=>a.world.distanceTo(target)-b.world.distanceTo(target));lights.forEach((light,n)=>{const s=ranked[n];light.visible=!!s;if(s){light.position.copy(root.worldToLocal(s.world));light.intensity=s.power;}});}
  return{kit:k,materials:m,building,updateLights,update:k.update,proxy(parent){platform(parent,{proxy:true});for(const p of projects){const q=positionOf(p),g=group(parent,q.x,0,q.z);building(g,p,{proxy:true});}return parent;},dispose:k.dispose};
 }
