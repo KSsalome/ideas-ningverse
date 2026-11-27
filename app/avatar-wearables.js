@@ -48,8 +48,8 @@ export function addWearables({g,look,mesh,box,ball,cyl,m,gold,skin,lowDetail}){
  }
  if(look.face==='reading-glasses'){
   const frame=m(look.faceColor??'#b39659',{metalness:.65,roughness:.32});
-  for(const x of [-.13,.13]){named(mesh(new THREE.TorusGeometry(.098,.009,4,lowDetail?12:20),frame,x,1.47,.355),'wearable-reading-glasses');tube([[x*1.8,1.48,.32],[x*2.45,1.48,.15],[x*2.5,1.45,.02]],.008,frame);}
-  box(.065,.012,.014,frame,0,1.49,.355);
+  for(const x of [-.14,.14]){named(mesh(new THREE.TorusGeometry(.112,.01,4,lowDetail?12:20),frame,x,1.415,.345),'wearable-reading-glasses');tube([[x*1.75,1.43,.31],[x*2.4,1.43,.15],[x*2.45,1.41,.02]],.008,frame);}
+  box(.06,.012,.014,frame,0,1.44,.352);
  }
  if(look.body==='sun-feather'){
   const feather=new THREE.Group();feather.name='wearable-sun-feather';feather.position.set(.19,1.04,.33);feather.rotation.z=-.5;g.add(feather);
