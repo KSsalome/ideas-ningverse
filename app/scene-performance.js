@@ -21,18 +21,68 @@ export function resolutionBudget({ratio,minRatio,fps=60}){
 export default function sceneBudget({container,renderer,svg=false}){
  const device=typeof navigator==='undefined'?{}:navigator,coarse=typeof matchMedia!=='undefined'&&matchMedia('(pointer: coarse)').matches;
  const quality=sceneProfile({width:container.clientWidth||1280,height:container.clientHeight||800,dpr:typeof devicePixelRatio==='undefined'?1:devicePixelRatio,coarse,memory:device.deviceMemory??8,cores:device.hardwareConcurrency??8});
- const gate=frameGate(svg?30:quality.fps),idleQuality=idleProfile(quality);let resolution=null,w=1,h=1,dirty=true,paused=false,lastDraw=-Infinity,lastShadow=-Infinity,lastMove=-Infinity,idle=false,pendingSize=false,frames=0;listenForActivity();
- if(!svg&&renderer.shadowMap)renderer.shadowMap.autoUpdate=false;
+ const gate=frameGate(svg?30:quality.fps),idleQuality=idleProfile(quality);let resolution=null,w=1,h=1,dirty=true,paused=false,lastDraw=-Infinity,lastShadow=-Infinity,lastMotion=-Infinity,idle=false,pendingSize=false,frames=0,svgInterval=0;listenForActivity();
+ if(!svg&&renderer.shadowMap){
+  renderer.shadowMap.autoUpdate=false;
+  // Refraction is sampled through translucent materials. Keep the main
+  // canvas sharp while reducing the resolution of the extra scene pass.
+  renderer.transmissionResolutionScale=quality.limited?.5:.75;
+ }
  function invalidate(){dirty=true;}
- function resize(width,height){w=Math.max(1,width);h=Math.max(1,height);const max=Math.min(quality.maxRatio,typeof devicePixelRatio==='undefined'?1:devicePixelRatio,Math.sqrt(quality.pixelBudget/(w*h)));resolution=resolutionBudget({ratio:max,minRatio:quality.minRatio,fps:quality.fps});if(!svg)renderer.setPixelRatio(max);renderer.setSize(w,h);pendingSize=false;lastShadow=-Infinity;dirty=true;}
- function step(now,isPaused=false){if(isPaused){paused=true;gate.reset();resolution?.reset();return false;}if(paused){paused=false;dirty=true;noteActivity(now);}const quiet=!svg&&isIdle(now,lastMove);if(quiet!==idle){idle=quiet;gate.setFps(idle?idleQuality.fps:quality.fps);resolution?.reset();}if(!gate.step(now))return false;if(!svg&&!idle&&resolution?.sample(now))pendingSize=true;return true;}
+ function resize(width,height){
+  w=Math.max(1,width);h=Math.max(1,height);
+  const max=Math.min(quality.maxRatio,typeof devicePixelRatio==='undefined'?1:devicePixelRatio,Math.sqrt(quality.pixelBudget/(w*h)));
+  resolution=resolutionBudget({ratio:max,minRatio:quality.minRatio,fps:quality.fps});
+  if(svg)renderer.setSize(w,h);
+  else{
+   renderer.setDrawingBufferSize(w,h,max);
+   renderer.domElement.style.width=w+'px';
+   renderer.domElement.style.height=h+'px';
+  }
+  pendingSize=false;lastShadow=-Infinity;dirty=true;
+ }
+ function step(now,isPaused=false){if(isPaused){paused=true;gate.reset();resolution?.reset();return false;}if(paused){paused=false;dirty=true;noteActivity(now);}const quiet=!svg&&isIdle(now,lastMotion);if(quiet!==idle){idle=quiet;gate.setFps(idle?idleQuality.fps:quality.fps);resolution?.reset();}if(!gate.step(now))return false;if(!svg&&!idle&&resolution?.sample(now))pendingSize=true;return true;}
  function render(effects,now,{moving=false}={}){
-  if(moving){dirty=true;lastMove=now;}if(svg&&(!dirty||now-lastDraw<250))return false;
-  if(pendingSize){renderer.setPixelRatio(resolution.ratio);renderer.setSize(w,h);effects.resize(w,h);pendingSize=false;lastShadow=-Infinity;}
-  if(!svg&&renderer.shadowMap&&now-lastShadow>=1000/(idle?idleQuality.shadowHz:quality.shadowHz)){renderer.shadowMap.needsUpdate=true;lastShadow=now;}
-  effects.render(now);dirty=false;lastDraw=now;frames++;return true;
+  if(moving){dirty=true;lastMotion=now;}
+  if(svg&&(!dirty||now-lastDraw+.5<svgInterval))return false;
+  if(pendingSize&&now-lastMotion>=250){
+   if(Math.abs(renderer.getPixelRatio()-resolution.ratio)>.02){
+    renderer.setDrawingBufferSize(w,h,resolution.ratio);
+    effects.resize(w,h);
+   }
+   pendingSize=false;
+  }
+  const updateShadow=!svg&&renderer.shadowMap&&now-lastShadow>=1000/(idle?idleQuality.shadowHz:quality.shadowHz);
+  if(updateShadow){renderer.shadowMap.needsUpdate=true;lastShadow=now;}
+  if(svg){
+   const started=performance.now();
+   effects.render(now);
+   // Leave time for browser input and painting when SVG projection is expensive.
+   svgInterval=Math.min(200,Math.max(1000/30,(performance.now()-started)*1.25));
+  }else effects.render(now,updateShadow);
+  dirty=false;lastDraw=now;frames++;return true;
  }
  return{quality,step,resize,render,invalidate,get idle(){return idle;},stats(){return{renderer:svg?'svg':'webgl',targetFps:svg?null:quality.fps,pixelRatio:svg?1:renderer.getPixelRatio(),frames,idle,currentFps:svg?null:gate.fps,bloomHz:svg?0:quality.bloomHz,shadowHz:svg?0:idle?idleQuality.shadowHz:quality.shadowHz};}};
+}
+
+// Rank nearby fixtures only while their lights can affect the scene. Crossing
+// the range boundary always takes effect, even after a sub-unit camera move.
+export function trackLocalLights(lights,island,range,step){
+ let active=null,lastX=0,lastZ=0;
+ return target=>{
+  if(!lights.length)return false;
+  const nearby=Math.hypot(target.x-island.x,target.z-island.z)<range;
+  if(!nearby){
+   if(active!==false)for(const light of lights)light.visible=false;
+   active=false;
+   return false;
+  }
+  if(active&&Math.hypot(target.x-lastX,target.z-lastZ)<step)return false;
+  active=true;
+  lastX=target.x;
+  lastZ=target.z;
+  return true;
+ };
 }
 
 // Freeze local matrices only where no animation is declared. Dynamic groups,

@@ -1,3 +1,4 @@
+import {trackLocalLights} from './scene-performance.js';
 import * as THREE from 'three';
 import factoryKit from './factory-kit.js';
 import factoryStairs from './factory-stairs.js';
@@ -61,8 +62,8 @@ export default function createFactoryIsland({root,island,projects=[],lowDetail=f
  for(let n=0;n<36;n++){const a=n/36*TAU,b=(n+1)/36*TAU,x=Math.sin(a)*island.rx*.94,z=Math.cos(a)*island.rz*.94,xx=Math.sin(b)*island.rx*.94,zz=Math.cos(b)*island.rz*.94;if(nearBridge(x,z)||nearBridge(xx,zz))continue;k.rail(root,[x,z],[xx,zz],1.08);if(n%6===0)postLamp(root,x,z,2.7);}
  for(const [x,z,seed]of [[-10,-5,51],[10,4,52],[-7,-10,55]]){const plant=k.tree(root,x,0,z,lowDetail?.65:.8,'round',seed);plant.name='factory-sparse-greenery';k.ivy(root,x,-.2,z,2.8,seed);}
  if(!lowDetail)for(let n=0;n<6;n++){const light=new THREE.PointLight(k.palette.light,14,8,2);light.name='factory-bounded-terrace-light';light.castShadow=false;root.add(light);lights.push(light);}
- let lastX=Infinity,lastZ=Infinity;
- function updateLights(target){if(!lights.length||Math.hypot(target.x-lastX,target.z-lastZ)<.8)return;lastX=target.x;lastZ=target.z;const enabled=Math.hypot(target.x-island.x,target.z-island.z)<island.rx+20,ranked=sources.map(s=>({...s,world:s.object.localToWorld(s.point.clone())})).sort((a,b)=>Math.hypot(a.world.x-target.x,(a.world.y-(target.y??island.height+2))*.7,a.world.z-target.z)-Math.hypot(b.world.x-target.x,(b.world.y-(target.y??island.height+2))*.7,b.world.z-target.z));lights.forEach((light,n)=>{const source=ranked[n];light.visible=enabled&&!!source;if(source){light.position.copy(root.worldToLocal(source.world));light.intensity=source.power;light.distance=source.distance??8;}});}
+ const refreshLights=trackLocalLights(lights,island,island.rx+20,.8);
+ function updateLights(target){if(!refreshLights(target))return;const ranked=sources.map(s=>({...s,world:s.object.localToWorld(s.point.clone())})).sort((a,b)=>Math.hypot(a.world.x-target.x,(a.world.y-(target.y??island.height+2))*.7,a.world.z-target.z)-Math.hypot(b.world.x-target.x,(b.world.y-(target.y??island.height+2))*.7,b.world.z-target.z));lights.forEach((light,n)=>{const source=ranked[n];light.visible=!!source;if(source){light.position.copy(root.worldToLocal(source.world));light.intensity=source.power;light.distance=source.distance??8;}});}
  function proxy(parent){platform(parent,true);for(const p of projects){const q=positionOf(p);building(group(parent,q.x,0,q.z),p,{proxy:true});}return parent;}
  return{kit:k,materials:m,building,proxy,postLamp,lamp:k.lamp,update:k.update,updateLights,dispose:k.dispose};
 }

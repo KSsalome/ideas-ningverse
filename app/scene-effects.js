@@ -64,7 +64,20 @@ export default function sceneEffects({renderer,scene,camera,lowDetail=false,phas
   setLibraryLighting(state){if(!reading||libraryMode===state.mode)return;libraryMode=state.mode;ambient.color.set(state.ambient);hemisphere.color.set(state.light);key.color.set(state.light);key.intensity=lowDetail?.48:state.key;key.position.set(-2,17,4);key.target.position.set(0,1,-7);if(interiorLights[0]){interiorLights[0].color.set(state.light);interiorLights[0].intensity=state.fill;interiorLights[0].position.set(0,10.2,-5);}},
   setFactoryLighting(state){if(!bar||factoryMode===state.mode)return;factoryMode=state.mode;ambient.intensity=lowDetail?state.ambient*2.7:state.ambient;key.intensity=lowDetail?state.key*1.4:state.key;for(const light of interiorLights)light.intensity=light.userData.basePower*state.fill;},
   resize(w,h){if(composer){composer.setPixelRatio(renderer.getPixelRatio());composer.setSize(w,h);}bloomComposer?.setSize(Math.ceil(w*.4),Math.ceil(h*.4));lastBloom=-Infinity;},
-  render(now=performance.now()){if(!composer){renderer.render(scene,camera);if(transparentBackground)renderer.domElement.style.backgroundColor='transparent';return;}if(now-lastBloom>=1000/quality.bloomHz){const shadows=renderer.shadowMap.enabled;try{renderer.shadowMap.enabled=false;withBloomMask(scene,()=>bloomComposer.render(),blackMesh,blackLine);lastBloom=now;}finally{renderer.shadowMap.enabled=shadows;}}composer.render();},
+  render(now=performance.now(),updatingShadow=false){
+   if(!composer){
+    renderer.render(scene,camera);
+    if(lowDetail&&transparentBackground)renderer.domElement.style.backgroundColor='transparent';
+    return;
+   }
+   // Spread the full-scene passes across frames once the bloom texture exists.
+   if(lastBloom===-Infinity||!updatingShadow&&now-lastBloom>=1000/quality.bloomHz){
+    const shadows=renderer.shadowMap.enabled;
+    try{renderer.shadowMap.enabled=false;withBloomMask(scene,()=>bloomComposer.render(),blackMesh,blackLine);lastBloom=now;}
+    finally{renderer.shadowMap.enabled=shadows;}
+   }
+   composer.render();
+  },
   dispose(){for(const c of [composer,bloomComposer])if(c){for(const p of c.passes)p.dispose?.();c.dispose();}blackMesh?.dispose();blackLine?.dispose();environment?.dispose();cloudTexture?.dispose();}
  };
 }

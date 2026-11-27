@@ -11,12 +11,18 @@ function hull(points){
  for(const p of sorted.slice().reverse()){while(upper.length>1&&cross(upper.at(-2),upper.at(-1),p)<=0)upper.pop();upper.push(p);}
  return lower.slice(0,-1).concat(upper.slice(0,-1));
 }
-function polygonDistance(x,y,poly){
+function polygonDistanceSquared(x,y,edges){
  let positive=false,negative=false,best=Infinity;
- for(let n=0;n<poly.length;n++){
-  const a=poly[n],b=poly[(n+1)%poly.length],dx=b.x-a.x,dy=b.y-a.y,cross=dx*(y-a.y)-dy*(x-a.x);if(cross>0)positive=true;if(cross<0)negative=true;
-  const t=Math.max(0,Math.min(1,((x-a.x)*dx+(y-a.y)*dy)/(dx*dx+dy*dy||1))),d=(x-a.x-dx*t)**2+(y-a.y-dy*t)**2;best=Math.min(best,d);
- }return positive&&negative?Math.sqrt(best):0;
+ for(const edge of edges){
+  const {x:ax,y:ay,dx,dy,inverseLengthSquared}=edge,px=x-ax,py=y-ay;
+  const cross=dx*py-dy*px;
+  if(cross>0)positive=true;
+  if(cross<0)negative=true;
+  const t=clamp01((px*dx+py*dy)*inverseLengthSquared);
+  const ex=px-dx*t,ey=py-dy*t;
+  best=Math.min(best,ex*ex+ey*ey);
+ }
+ return positive&&negative?best:0;
 }
 export function skyRegions(camera,w,h,origins={}){
  camera.updateMatrixWorld();const v=new THREE.Vector3();
@@ -38,17 +44,38 @@ export function skyRegions(camera,w,h,origins={}){
  })};
 }
 
-export function skyMaskAt(x,y,regions,feather=64){
- const a=regions.home,cx=a.x+a.w*.5,cy=a.y+a.h*.43,rx=a.w*.73,ry=a.h*.75,r=Math.hypot((x-cx)/rx,(y-cy)/ry);
- let alpha=1-smooth01(clamp01((r-.52)/.48));
- if(!alpha)return 0;
- for(const b of regions.protected){
-  const dx=Math.max(b.x-10-x,0,x-b.x-b.w-10),dy=Math.max(b.y-10-y,0,y-b.y-b.h-10);
-  if(Math.hypot(dx,dy)>feather)continue;
-  let distance=Math.hypot(dx,dy);if(b.parts?.length){distance=Infinity;for(const poly of b.parts)distance=Math.min(distance,polygonDistance(x,y,poly));}
-  alpha*=smooth01(clamp01((distance-(b.parts?.length?8:0))/feather));if(!alpha)return 0;
- }return alpha;
+export function skyMaskSampler(regions,feather=64){
+ const a=regions.home,cx=a.x+a.w*.5,cy=a.y+a.h*.43,rx=a.w*.73,ry=a.h*.75;
+ const featherSquared=feather*feather;
+ const bounds=regions.protected.map(b=>({
+  left:b.x-10,right:b.x+b.w+10,top:b.y-10,bottom:b.y+b.h+10,
+  polygons:b.parts?.map(poly=>poly.map(({x,y},n)=>{
+   const next=poly[(n+1)%poly.length],dx=next.x-x,dy=next.y-y;
+   return {x,y,dx,dy,inverseLengthSquared:1/(dx*dx+dy*dy||1)};
+  }))??[]
+ }));
+ return (x,y)=>{
+  const nx=(x-cx)/rx,ny=(y-cy)/ry,rSquared=nx*nx+ny*ny;
+  if(rSquared>=1)return 0;
+  let alpha=1-smooth01(clamp01((Math.sqrt(rSquared)-.52)/.48));
+  for(const b of bounds){
+   const dx=Math.max(b.left-x,0,x-b.right),dy=Math.max(b.top-y,0,y-b.bottom);
+   let distanceSquared=dx*dx+dy*dy;
+   if(distanceSquared>featherSquared)continue;
+   if(b.polygons.length){
+    distanceSquared=Infinity;
+    for(const edges of b.polygons){
+     distanceSquared=Math.min(distanceSquared,polygonDistanceSquared(x,y,edges));
+     if(distanceSquared<=64)return 0;
+    }
+   }
+   alpha*=smooth01(clamp01((Math.sqrt(distanceSquared)-(b.polygons.length?8:0))/feather));
+   if(!alpha)return 0;
+  }
+  return alpha;
+ };
 }
+export function skyMaskAt(x,y,regions,feather=64){return skyMaskSampler(regions,feather)(x,y);}
 
 // A small 2D sky layer under the transparent 3D render. Its soft projected mask
 // belongs to the main island. Six exclusion masks protect the other districts'
@@ -87,8 +114,8 @@ export default function homeSky({container,camera,target,phase='medieval',buildi
    paint.beginPath();paint.ellipse(x,y,r*1.65,r*.31,0,0,Math.PI*2);paint.ellipse(x-r*.4,y-r*.13,r*.67,r*.35,0,0,Math.PI*2);paint.ellipse(x+r*.35,y-r*.15,r*.8,r*.4,0,0,Math.PI*2);paint.fill();
   }
   if(maskData&&maskPaint&&maskView!==view){
-   const mw=maskCanvas.width,mh=maskCanvas.height,feather=Math.max(45,Math.min(w,h)*.22);
-   for(let y=0;y<mh;y++)for(let x=0;x<mw;x++){const n=(y*mw+x)*4;maskData.data[n]=maskData.data[n+1]=maskData.data[n+2]=255;maskData.data[n+3]=Math.round(skyMaskAt((x+.5)*w/mw,(y+.5)*h/mh,regions,feather)*255);}
+   const mw=maskCanvas.width,mh=maskCanvas.height,alpha=skyMaskSampler(regions,Math.max(45,Math.min(w,h)*.22));
+   for(let y=0;y<mh;y++)for(let x=0;x<mw;x++){const n=(y*mw+x)*4;maskData.data[n]=maskData.data[n+1]=maskData.data[n+2]=255;maskData.data[n+3]=Math.round(alpha((x+.5)*w/mw,(y+.5)*h/mh)*255);}
    maskPaint.putImageData(maskData,0,0);maskView=view;
   }
   paint.globalAlpha=1;paint.globalCompositeOperation='destination-in';paint.drawImage(maskCanvas,0,0,w,h);paint.globalCompositeOperation='source-over';ctx.clearRect(0,0,w,h);ctx.drawImage(buffer,0,0);canvas.dataset.protectedIslands=regions.protected.map(x=>x.id).join(',');
