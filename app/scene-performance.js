@@ -1,3 +1,4 @@
+import * as THREE from 'three';
 // Rendering budgets change sampling cost, never layout, models or navigation.
 export function sceneProfile({width=1280,height=800,dpr=1,coarse=false,memory=8,cores=8}={}){
  const compact=width<700||coarse,limited=compact||(memory<=4&&cores<=4),pixelBudget=limited?800000:2200000,maxRatio=limited?1.25:1.5;
@@ -8,7 +9,7 @@ export function frameGate(fps=60){let last=-Infinity,interval=1000/fps;return{se
 // movement, ambient animation (water, sky, motes) keeps running at a lower
 // rate. Any touch, key, wheel or pointer movement restores full rate at once.
 // One shared listener set for every scene; nothing to dispose per scene.
-export const IDLE_AFTER_MS=6000;
+export const IDLE_AFTER_MS=6000,AMBIENT_SHADOW_HZ=4;
 let lastActivity=-Infinity,listening=false;
 export function noteActivity(now=typeof performance==='undefined'?Date.now():performance.now()){lastActivity=now;}
 function listenForActivity(){if(listening||typeof window==='undefined')return;listening=true;noteActivity();const mark=()=>noteActivity();for(const type of ['pointerdown','pointermove','wheel','keydown','touchstart'])window.addEventListener(type,mark,{passive:true,capture:true});}
@@ -42,7 +43,7 @@ export default function sceneBudget({container,renderer,svg=false}){
   pendingSize=false;lastShadow=-Infinity;dirty=true;
  }
  function step(now,isPaused=false){if(isPaused){paused=true;gate.reset();resolution?.reset();return false;}if(paused){paused=false;dirty=true;noteActivity(now);}const quiet=!svg&&isIdle(now,lastMotion);if(quiet!==idle){idle=quiet;gate.setFps(idle?idleQuality.fps:quality.fps);resolution?.reset();}if(!gate.step(now))return false;if(!svg&&!idle&&resolution?.sample(now))pendingSize=true;return true;}
- function render(effects,now,{moving=false}={}){
+ function render(effects,now,{moving=false,castersMoving=moving}={}){
   if(moving){dirty=true;lastMotion=now;}
   if(svg&&(!dirty||now-lastDraw+.5<svgInterval))return false;
   if(pendingSize&&now-lastMotion>=250){
@@ -52,7 +53,10 @@ export default function sceneBudget({container,renderer,svg=false}){
    }
    pendingSize=false;
   }
-  const updateShadow=!svg&&renderer.shadowMap&&now-lastShadow>=1000/(idle?idleQuality.shadowHz:quality.shadowHz);
+  // The world and the sun are fixed while the camera pans or zooms, so the
+   // shadow map only needs a full refresh when a caster (player, chick) moves.
+   // Slow ambient animation (spinning armillaries, windmills) refreshes at 4Hz.
+   const updateShadow=!svg&&renderer.shadowMap&&now-lastShadow>=1000/(idle?idleQuality.shadowHz:castersMoving?quality.shadowHz:AMBIENT_SHADOW_HZ);
   if(updateShadow){renderer.shadowMap.needsUpdate=true;lastShadow=now;}
   if(svg){
    const started=performance.now();
@@ -62,7 +66,7 @@ export default function sceneBudget({container,renderer,svg=false}){
   }else effects.render(now,updateShadow);
   dirty=false;lastDraw=now;frames++;return true;
  }
- return{quality,step,resize,render,invalidate,get idle(){return idle;},stats(){return{renderer:svg?'svg':'webgl',targetFps:svg?null:quality.fps,pixelRatio:svg?1:renderer.getPixelRatio(),frames,idle,currentFps:svg?null:gate.fps,bloomHz:svg?0:quality.bloomHz,shadowHz:svg?0:idle?idleQuality.shadowHz:quality.shadowHz};}};
+ return{quality,step,resize,render,invalidate,invalidateShadow(){lastShadow=-Infinity;},get idle(){return idle;},stats(){return{renderer:svg?'svg':'webgl',targetFps:svg?null:quality.fps,pixelRatio:svg?1:renderer.getPixelRatio(),frames,idle,currentFps:svg?null:gate.fps,bloomHz:svg?0:quality.bloomHz,shadowHz:svg?0:idle?idleQuality.shadowHz:quality.shadowHz};}};
 }
 
 // Rank nearby fixtures only while their lights can affect the scene. Crossing
@@ -87,6 +91,16 @@ export function trackLocalLights(lights,island,range,step){
 
 // Freeze local matrices only where no animation is declared. Dynamic groups,
 // lights and their targets remain live; hit targets retain world coordinates.
+// Small props (lanterns, bolts, petals, window trims) barely darken the
+// ground at this camera distance but each one costs a draw in the shadow
+// pass. Keep shadows for anything with real volume; tiny parts still
+// receive shadows from larger casters.
+export function pruneShadowCasters(root,minRadius=.45){
+ root.updateMatrixWorld(true);const scale=new THREE.Vector3();let kept=0,pruned=0;
+ root.traverse(o=>{if(!o.isMesh||!o.castShadow)return;for(let p=o;p;p=p.parent)if(p.userData.keepShadow){kept++;return;}const g=o.geometry;if(!g.boundingSphere)g.computeBoundingSphere();o.getWorldScale(scale);const r=(g.boundingSphere?.radius??0)*Math.max(scale.x,scale.y,scale.z)*(o.isInstancedMesh?4:1);if(r<minRadius){o.castShadow=false;pruned++;}else kept++;});
+ return{kept,pruned};
+}
+
 export function freezeStaticTransforms(root){
  root.updateMatrixWorld(true);let count=0;
  function visit(o,dynamic=false){dynamic=dynamic||!!o.userData.dynamic;if(!dynamic&&(o.isMesh||o.isGroup)){o.updateMatrix();o.matrixAutoUpdate=false;count++;}for(const child of o.children)visit(child,dynamic);}

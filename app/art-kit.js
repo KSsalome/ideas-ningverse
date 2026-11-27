@@ -14,7 +14,7 @@ export default function artKit({lowDetail=false,phase='industrial',palette={}}={
  function mat(color,type='stone',extra={}){
   const key=JSON.stringify([color,type,extra]);if(materials.has(key))return materials.get(key);let m;
   if(type==='glow')m=new THREE.MeshBasicMaterial({color,toneMapped:true,side:THREE.DoubleSide,...extra});
-  else if(type==='gem'&&!lowDetail)m=new THREE.MeshPhysicalMaterial({color,roughness:.24,metalness:.08,transmission:.25,thickness:.5,ior:1.45,clearcoat:.3,envMapIntensity:.4,emissive:theme.magic,emissiveIntensity:.08,...extra});
+  else if(type==='gem'&&!lowDetail)m=new THREE.MeshPhysicalMaterial({color,roughness:.2,metalness:.08,transparent:true,opacity:.86,ior:1.45,clearcoat:.55,clearcoatRoughness:.12,envMapIntensity:.55,emissive:theme.magic,emissiveIntensity:.12,...extra});
   else if(lowDetail)m=new THREE.MeshLambertMaterial({color,side:THREE.FrontSide,...extra});
   else m=new THREE.MeshStandardMaterial({color,roughness:type==='metal'?.4:type==='glass'?.36:type==='marble'?.68:type==='cloth'?.96:.88,metalness:type==='metal'?.68:type==='glass'?.12:0,side:THREE.FrontSide,...extra});
   m.userData.bloom=type==='glow'&&!extra.transparent;if(type==='glow'&&!lowDetail)m.color.multiplyScalar(1.3);materials.set(key,m);return m;

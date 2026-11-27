@@ -68,7 +68,7 @@ test('automatic walking uses the whole movement budget through a waypoint withou
 });
 
 test('native budget keeps a 30fps schedule and refreshes shadows at 10Hz without changing the camera or material data',()=>{
- const renderer=fakeRenderer(),budget=sceneBudget({container:{clientWidth:390,clientHeight:844},renderer}),effect={render(){},resize(){}},camera=new THREE.PerspectiveCamera(),view=camera.toJSON();budget.resize(390,844);let frames=0,shadows=0;for(let n=0;n<60;n++){const t=n*1000/60;if(!budget.step(t))continue;renderer.shadowMap.needsUpdate=false;if(budget.render(effect,t))frames++;if(renderer.shadowMap.needsUpdate)shadows++;}assert.ok(frames>=29&&frames<=31);assert.ok(shadows<=10&&shadows>=8);assert.equal(renderer.shadowMap.autoUpdate,false);assert.deepEqual(renderer.size,[390,844]);assert.deepEqual(camera.toJSON(),view);assert.equal(budget.stats().bloomHz,0);
+ const renderer=fakeRenderer(),budget=sceneBudget({container:{clientWidth:390,clientHeight:844},renderer}),effect={render(){},resize(){}},camera=new THREE.PerspectiveCamera(),view=camera.toJSON();budget.resize(390,844);let frames=0,shadows=0;for(let n=0;n<60;n++){const t=n*1000/60;if(!budget.step(t))continue;renderer.shadowMap.needsUpdate=false;if(budget.render(effect,t,{castersMoving:true}))frames++;if(renderer.shadowMap.needsUpdate)shadows++;}assert.ok(frames>=29&&frames<=31);assert.ok(shadows<=10&&shadows>=8);assert.equal(renderer.shadowMap.autoUpdate,false);assert.deepEqual(renderer.size,[390,844]);assert.deepEqual(camera.toJSON(),view);assert.equal(budget.stats().bloomHz,0);
 });
 
 test('stationary exhibit labels skip layout writes but update after camera, floor or resize changes',()=>{
@@ -104,4 +104,21 @@ test('light motes are a single GPU-animated draw call sized to the device',async
  const t=motes.points.material.uniforms.uTime;motes.update(5000,{zoom:3,pixelRatio:1.25});assert.equal(t.value,5);
  const still=lightMotes({islands,reducedMotion:true});still.update(5000);assert.equal(still.points.material.uniforms.uTime.value,0,'reduced motion freezes drift');
  motes.dispose();still.dispose();
+});
+
+test('shadows refresh fast only while a caster moves; camera pans use the slow ambient rate',async()=>{
+ const {default:budgetFor,AMBIENT_SHADOW_HZ}=await import('../app/scene-performance.js');
+ const renderer={ratio:1,domElement:{style:{}},shadowMap:{autoUpdate:true,needsUpdate:false},getPixelRatio(){return this.ratio;},setSize(){},setDrawingBufferSize(w,h,r){this.ratio=r;}};
+ const count=castersMoving=>{const budget=budgetFor({container:{clientWidth:1280,clientHeight:800},renderer});budget.resize(1280,800);let updates=0;const effects={render(now,shadow){if(shadow)updates++;},resize(){}};for(let now=0;now<1000;now+=1000/60){budget.step(now);budget.render(effects,now,{moving:true,castersMoving});}return updates;};
+ const walking=count(true),panning=count(false);
+ assert.ok(walking>=3*AMBIENT_SHADOW_HZ,`walking ${walking}`);
+ assert.ok(panning<=AMBIENT_SHADOW_HZ+1,`panning ${panning}`);
+});
+
+test('tiny props stop casting shadows but avatars keep theirs',async()=>{
+ const THREE=await import('three');const {pruneShadowCasters}=await import('../app/scene-performance.js');
+ const root=new THREE.Group(),tiny=new THREE.Mesh(new THREE.BoxGeometry(.2,.2,.2)),tower=new THREE.Mesh(new THREE.BoxGeometry(3,8,3)),avatar=new THREE.Group(),hand=new THREE.Mesh(new THREE.BoxGeometry(.1,.1,.1));
+ avatar.userData.keepShadow=true;avatar.add(hand);for(const m of [tiny,tower,hand])m.castShadow=true;root.add(tiny,tower,avatar);
+ assert.deepEqual(pruneShadowCasters(root),{kept:2,pruned:1});
+ assert.equal(tiny.castShadow,false);assert.equal(tower.castShadow,true);assert.equal(hand.castShadow,true);
 });
