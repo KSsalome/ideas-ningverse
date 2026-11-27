@@ -47,27 +47,42 @@ void main(){
  vec3 hover=vec3((sin(t*.7+seed)*.65+sin(t*.31+seed*2.3)*.35)*radius,
                  (sin(t*.9+seed*3.1)*.6+sin(t*.43+seed)*.4)*radius*.7,
                  (cos(t*.6+seed*1.3)*.65+cos(t*.27+seed*.7)*.35)*radius);
- // 夜薔: petals fall in a long, swaying glide, drifting with a light breeze,
- // then loop back above the island. Fading at both ends hides the loop.
- float cycle=fract(uTime*speed*.075+seed*.137);
- vec3 fall=vec3(sin(uTime*.8*speed+seed)*1.5+cycle*2.6,6.-cycle*12.,cos(uTime*.65*speed+seed*1.7)*1.1+cycle*1.4);
+ // 夜薔: petals are carried by the wind. They sink slowly while travelling
+ // far downwind; a shared gust field (neighbours move together) speeds them
+ // up, lifts them a little and makes them flutter, then they loop back
+ // upwind. Fading at both ends hides the loop.
+ float cycle=fract(uTime*speed*.055+seed*.137);
+ vec3 windDir=normalize(vec3(1.,0.,.42)),side=vec3(-windDir.z,0.,windDir.x);
+ float gustPhase=uTime*.42-dot(position.xz,vec2(.06,.025));
+ float gust=.5+.5*sin(gustPhase)*.7+.5*.3*sin(gustPhase*2.3+1.7);
+ // Integrated gust: speeds petals up without ever pushing them back upwind.
+ float surge=-cos(gustPhase)*.55-cos(gustPhase*2.3+1.7)*.08;
+ float flutter=sin(uTime*(1.6+fract(seed*2.7))*speed+seed*5.)*(.35+gust*.55);
+ vec3 fall=windDir*(cycle*11.-5.5+surge)
+          +side*(sin(uTime*.55*speed+seed)*1.1+flutter*.5)
+          +vec3(0.,5.-cycle*9.+sin(gustPhase+.6)*.7*gust+flutter*.25,0.);
  p+=mix(hover,fall,uRose);
  vec4 mv=modelViewMatrix*vec4(p,1.);
  gl_Position=projectionMatrix*mv;
  float twinkle=.55+.45*sin(uTime*(1.3+fract(seed)*1.7)+seed*6.283);
  float breathe=.6+.4*sin(t*.23+seed*4.);
  float ends=smoothstep(0.,.12,cycle)*(1.-smoothstep(.86,1.,cycle));
- // Most motes become petals; a few stay as glowing embers among them.
- vPetal=uRose*step(.2,fract(seed*.77));
- vAlpha=mix(twinkle*breathe,mix(1.,ends,uRose),vPetal)*uIntensity*(1.+uRose*.4);
- // Each petal turns in the air (spin) and tumbles end over end (flip).
- vSpin=seed*6.283+uTime*(.5+fract(seed*1.9)*.9)*(fract(seed*.41)<.5?-1.:1.);
- vFlip=cos(uTime*(1.1+fract(seed*3.3)*1.3)+seed);
+ // About a third of the motes become petals, a fifth stay as glowing embers,
+ // and the rest fade out so the sky is not crowded.
+ float role=fract(seed*.77);
+ vPetal=uRose*step(.68,role);
+ float hidden=uRose*step(.2,role)*(1.-step(.68,role));
+ vAlpha=mix(twinkle*breathe,mix(1.,ends,uRose),vPetal)*uIntensity*(1.+uRose*.4)*(1.-hidden);
+ // Each petal turns in the air (spin) and tumbles end over end (flip),
+ // faster while a gust is passing.
+ float dir=fract(seed*.41)<.5?-1.:1.;
+ vSpin=seed*6.283+(uTime*(.45+fract(seed*1.9)*.7)+surge*.9)*dir+flutter*.35;
+ vFlip=cos(uTime*(1.+fract(seed*3.3)*1.2)+surge*1.6+seed);
  float pick=fract(seed*.53);
  vec3 rose=pick<.45?vec3(.62,.04,.12):pick<.8?vec3(.82,.1,.2):vec3(.28,.02,.06);
  vColor=mix(aColor,mix(vec3(1.,.3,.18),rose,vPetal),uRose);
  vShade=pick;
- gl_PointSize=size*uScale*mix(.75+.25*twinkle,1.75,vPetal);
+ gl_PointSize=size*uScale*mix(.75+.25*twinkle,1.75,vPetal)*(1.-hidden);
 }`;
 const fragmentShader=`
 uniform float uRose;varying vec3 vColor;varying float vAlpha;varying float vPetal;varying float vSpin;varying float vFlip;varying float vShade;
