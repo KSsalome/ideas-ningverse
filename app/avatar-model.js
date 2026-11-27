@@ -46,75 +46,64 @@ export function hairGeometry(style='short',lowDetail=false){
  // over a slightly smaller under-layer (returned separately, in a deeper
  // shade) that shows through between the locks and gives the hair depth.
  const open=1.05,cap=new THREE.SphereGeometry(.405,lowDetail?12:28,lowDetail?7:16,Math.PI/2+open,Math.PI*2-open*2,0,Math.PI*.47);cap.scale(1,1.02,.95);cap.translate(0,1.5,-.018);parts.push(cap);
+ const crown=new THREE.SphereGeometry(.405,lowDetail?12:28,lowDetail?4:8,0,Math.PI*2,0,Math.PI*.2);crown.scale(1,1.02,.95);crown.translate(0,1.5,-.018);parts.push(crown);
  const under=new THREE.SphereGeometry(1,lowDetail?12:28,lowDetail?7:14,0,Math.PI*2,0,1.22);under.scale(HEAD.rx*1.07,HEAD.ry*1.07,HEAD.rz*1.07);under.translate(HEAD.x,HEAD.y,HEAD.z);
  const back=new THREE.SphereGeometry(.402,lowDetail?10:22,lowDetail?5:12,Math.PI,Math.PI,Math.PI*.3,Math.PI*.46);back.scale(1,1.02,.97);back.translate(0,1.45,-.02);parts.push(back);
  // Fringe: parted slightly to one side; locks sweep away from the part and
  // end in soft points just above the brows.
- const fringe=lowDetail?5:8,part=.3;
+ const fringe=lowDetail?5:7,part=.3;
  for(let i=0;i<fringe;i++){
   const u=i/(fringe-1),theta=-1.0+u*2.0,away=theta<part?-1:1,sweep=away*(.06+Math.abs(theta-part)*.1);
   const tipPhi=1.3+(i%2?.05:0)-Math.abs(theta)*.04;
   // Each lock runs from near the crown down over the forehead.
-  s(along(theta*.55+part*.3,.42,theta+sweep,tipPhi,1.14,1.1,6),{width:.22+(i%3)*.025,depth:.055,tip:.07});
+  s(along(theta*.6+part*.3,.5,theta+sweep,tipPhi,1.12,1.11,6),{width:.28+(i%3)*.03,depth:.085,tip:.14,bulge:.22});
  }
  // Side locks fall in front of the ears and frame the cheeks.
  for(const side of [-1,1]){
-  s([...along(side*1.1,.7,side*1.3,1.55,1.14,1.1,5),[side*.35,1.12,.1],[side*.31,style==='long'?.92:1.04,.12]],{width:.17,depth:.055,tip:.07});
-  if(!lowDetail)s([...along(side*1.45,.75,side*1.6,1.6,1.14,1.1,5),[side*.39,1.12,-.02]],{width:.19,depth:.055,tip:.08});
+  s([...along(side*1.1,.7,side*1.3,1.55,1.14,1.1,5),[side*.35,1.12,.1],[side*.31,style==='long'?.92:1.04,.12]],{width:.22,depth:.08,tip:.15,bulge:.2});
+  if(!lowDetail)s([...along(side*1.45,.75,side*1.6,1.6,1.14,1.1,5),[side*.39,1.12,-.02]],{width:.24,depth:.08,tip:.16,bulge:.2});
  }
  if(style==='long'){const curtain=new THREE.CylinderGeometry(.37,.34,.5,lowDetail?8:18,1,true,Math.PI*.5+.25,Math.PI-.5);curtain.scale(1,1,.78);curtain.translate(0,1.12,-.05);parts.push(curtain);}
  // Back: a tucked bob for short hair, long locks to the waist otherwise.
  const backLocks=lowDetail?6:(style==='long'?11:10);
  for(let i=0;i<backLocks;i++){
   const u=i/(backLocks-1),theta=Math.PI*(.5+u),sway=Math.sin(theta);
-  if(style==='long')s([...along(theta,.95,theta,1.65,1.13,1.14,4),[sway*.36,1.05,Math.cos(theta)*.3-.06],[sway*.33,.72+(i%3)*.04,Math.cos(theta)*.27-.1]],{width:.26,depth:.06,tip:.12});
-  else s(along(theta,.95,theta*1.01,2.05+(i%2)*.06,1.13,1.0,6),{width:.24,depth:.06,tip:.12});
+  if(style==='long')s([...along(theta,.95,theta,1.65,1.13,1.14,4),[sway*.36,1.05,Math.cos(theta)*.3-.06],[sway*.33,.72+(i%3)*.04,Math.cos(theta)*.27-.1]],{width:.3,depth:.085,tip:.16,bulge:.22});
+  else s(along(theta,.95,theta*1.01,2.05+(i%2)*.06,1.14,1.0,6),{width:.3,depth:.085,tip:.18,bulge:.22});
  }
  if(style==='bun'){
   const bun=new THREE.SphereGeometry(.17,lowDetail?8:16,lowDetail?6:12);bun.scale(1,.9,.95);bun.translate(0,1.74,-.24);parts.push(bun);
   for(let i=0;i<(lowDetail?2:5);i++){const a=i/5*Math.PI*2;s([[Math.cos(a)*.15,1.66,-.24+Math.sin(a)*.15],[Math.cos(a+1.1)*.175,1.75,-.24+Math.sin(a+1.1)*.175],[Math.cos(a+2.2)*.11,1.85,-.24+Math.sin(a+2.2)*.11]],{width:.08,depth:.035,tip:.15});}
  }
- // One stray lock at the crown (ahoge).
- if(!lowDetail)s([headPoint(.25,.12,1.08),[.05,1.93,.05],[.12,1.99,.12],[.17,1.94,.18]],{width:.06,depth:.035,tip:.08,segments:10});
  // Shine comes from the clearcoat on the hair material.
  return{hair:merged(parts),under,sheen:sheen.length?merged(sheen):null};
 }
 
 const irisColors={brown:'#a0673f',green:'#3f9a7a',blue:'#3f86c9',violet:'#8a68c8'};
 
-// Figure-style painted eye, generated pixel by pixel (no canvas needed, so
-// it also works in tests): a tall oval with a gradient iris that is deep at
-// the top and clear at the bottom, a bright reflection along the lower rim,
-// a soft pupil, one large and one small catch-light, a thick upper lash line
-// with a flick at the outer corner and a short lower lash.
+// Figure-style eye, painted pixel by pixel (no canvas needed, so it also
+// works in tests): a large, simple dark oval that takes on the chosen eye
+// colour toward its lower edge, one big round catch-light, one small one,
+// and a fine lash line along the top. Read clearly at game distance.
 const eyeTextures=new Map();
 export function eyeTexture(color='#3f86c9',size=128){
  const key=color+size;if(eyeTextures.has(key))return eyeTextures.get(key);
- const c=new THREE.Color(color),deep=c.clone().multiplyScalar(.32),clear=c.clone().lerp(new THREE.Color('#ffffff'),.55),lash=new THREE.Color('#2a1f2c'),white=new THREE.Color('#fbfaff');
+ const c=new THREE.Color(color),ink=new THREE.Color('#1c1620'),tint=ink.clone().lerp(c,.55),glow=c.clone().lerp(new THREE.Color('#ffffff'),.25),lash=new THREE.Color('#1a141c');
  const data=new Uint8Array(size*size*4),px=new THREE.Color(),smooth=(a,b,v)=>THREE.MathUtils.smoothstep(v,a,b);
  for(let j=0;j<size;j++)for(let i=0;i<size;i++){
-  // x: inner corner -1 → outer corner +1, y: bottom -1 → top +1
   const x=(i+.5)/size*2-1,y=(j+.5)/size*2-1;
-  const eye=Math.hypot(x/.66,(y+.02)/.84),iris=Math.hypot(x/.56,(y+.08)/.74);
-  let a=0;px.setRGB(0,0,0);
-  if(eye<1){
-   a=1;px.copy(white).lerp(new THREE.Color('#d9dcf0'),smooth(.2,.95,y));
-   if(iris<1){const t=smooth(-.75,.75,-y);px.copy(deep).lerp(c,smooth(0,.55,t)).lerp(clear,smooth(.55,1,t));
-    const ring=smooth(.82,1,iris);px.lerp(deep,ring*.7);
-    const pupil=Math.hypot(x/.2,(y-.02)/.3);px.lerp(deep.clone().multiplyScalar(.6),1-smooth(.75,1,pupil));
-    const reflect=Math.hypot(x/.42,(y+.5)/.16);px.lerp(clear.clone().lerp(new THREE.Color('#ffffff'),.4),(1-smooth(.6,1,reflect))*.75);}
-   // shade under the lash
-   px.lerp(deep,smooth(.55,.98,y)*smooth(.4,1,eye)*.4);
+  const eye=Math.hypot(x/.7,(y+.04)/.86);let a=0;
+  if(eye<1){a=1;
+   // deep at the top, the eye colour coming through toward the bottom
+   px.copy(ink).lerp(tint,1-smooth(-.75,.1,y)).lerp(glow,(1-smooth(-.8,-.45,y))*(1-smooth(.55,.95,eye))*.55);
+   px.lerp(ink,smooth(.85,1,eye)*.6);
   }
-  // upper lash: a thick band along the top of the oval, heavier toward the outer corner
-  const top=y-.84*Math.sqrt(Math.max(0,1-(x/.66)**2))+.02,thick=.13+.09*smooth(-.2,1,x);
-  if(Math.abs(x)<.72&&top>-thick&&top<.05&&y>-.05){a=1;px.copy(lash);}
-  // outer flick
-  const fx=x-.6,fy=y-.62;if(fx>-.05&&fx<.3&&fy>-.12+fx*.25&&fy<.02+fx*.55){a=1;px.copy(lash);}
-  // short lower lash at the outer bottom
-  const bottom=y+.86*Math.sqrt(Math.max(0,1-(x/.66)**2));if(x>.25&&x<.62&&Math.abs(bottom)<.035){a=1;px.copy(lash);}
-  // catch-lights
-  if(Math.hypot((x+.2)/.17,(y-.3)/.2)<1||Math.hypot((x-.24)/.07,(y+.3)/.07)<1){a=1;px.setRGB(1,1,1);}
+  // fine lash line hugging the top of the oval, a little heavier outside
+  const top=y-.86*Math.sqrt(Math.max(0,1-(x/.7)**2))+.04,thick=.07+.05*smooth(0,1,x);
+  if(Math.abs(x)<.74&&top>-thick&&top<.035&&y>.15){a=1;px.copy(lash);}
+  if(x>.55&&x<.86&&y>.42&&y<.62&&y-.42<(x-.55)*.9){a=1;px.copy(lash);}
+  // catch-lights: one big and round, one small
+  if(Math.hypot((x+.22)/.27,(y-.28)/.27)<1||Math.hypot((x-.27)/.1,(y+.36)/.1)<1){a=1;px.setRGB(1,1,1);}
   const o=(j*size+i)*4;data[o]=Math.round(Math.min(1,px.r)**(1/2.2)*255);data[o+1]=Math.round(Math.min(1,px.g)**(1/2.2)*255);data[o+2]=Math.round(Math.min(1,px.b)**(1/2.2)*255);data[o+3]=a*255;
  }
  const t=new THREE.DataTexture(data,size,size,THREE.RGBAFormat);t.colorSpace=THREE.SRGBColorSpace;t.magFilter=THREE.LinearFilter;t.minFilter=THREE.LinearFilter;t.needsUpdate=true;eyeTextures.set(key,t);return t;
@@ -129,18 +118,18 @@ function buildFace(g,data,m,hairColor,lowDetail){
  // Slightly curved so the painted eye hugs the face.
  const eyeGeo=new THREE.PlaneGeometry(1,1,6,6);{const pos=eyeGeo.attributes.position;for(let n=0;n<pos.count;n++){const x=pos.getX(n);pos.setZ(n,-x*x*.12);}eyeGeo.computeVertexNormals();}
  for(const side of [-1,1]){
-  const eye=new THREE.Mesh(eyeGeo,eyeMat);eye.name='avatar-eye';eye.scale.set(.19*side,.2,1);place(eye,side*.138,1.4,.004);
+  const eye=new THREE.Mesh(eyeGeo,eyeMat);eye.name='avatar-eye';eye.scale.set(.2*side,.23,1);place(eye,side*.152,1.375,.004);
   face.eyes.push(eye);
  }
  // Short, light brows set high, in a soft shade of the hair.
  const brow=new THREE.Color(hairColor).lerp(new THREE.Color('#6b5050'),.3);
- const browParts=[-1,1].map(side=>{const {p,n}=surface(side*.14,1.535,.006);const b=new THREE.CapsuleGeometry(.007,.06,2,4).rotateZ(Math.PI/2);const o=new THREE.Object3D();o.position.copy(p);o.lookAt(p.clone().add(n));o.rotateZ(side*-.18);o.updateMatrix();b.applyMatrix4(o.matrix);return b;});
+ const browParts=[-1,1].map(side=>{const {p,n}=surface(side*.15,1.53,.006);const b=new THREE.CapsuleGeometry(.006,.045,2,4).rotateZ(Math.PI/2);const o=new THREE.Object3D();o.position.copy(p);o.lookAt(p.clone().add(n));o.rotateZ(side*-.18);o.updateMatrix();b.applyMatrix4(o.matrix);return b;});
  const brows=new THREE.Mesh(merged(browParts),m('#'+brow.getHexString(),{roughness:.8}));brows.name='avatar-brows';g.add(brows);
  // A small, soft smile.
- const mouth=new THREE.Mesh(new THREE.TorusGeometry(.024,.006,4,lowDetail?6:10,Math.PI*.8),m('#c76a76',{roughness:.6}));mouth.name='avatar-mouth';place(mouth,0,1.305,.004);mouth.rotateZ(Math.PI+Math.PI*.1);face.mouth=mouth;
+ const mouth=new THREE.Mesh(new THREE.TorusGeometry(.018,.005,4,lowDetail?6:10,Math.PI*.8),m('#b8606c',{roughness:.6}));mouth.name='avatar-mouth';place(mouth,0,1.275,.004);mouth.rotateZ(Math.PI+Math.PI*.1);face.mouth=mouth;
  // Blush with soft edges.
  const blush=new THREE.MeshBasicMaterial({color:'#ff9fae',transparent:true,opacity:.35,depthWrite:false});
- for(const side of [-1,1]){const o=new THREE.Mesh(disc,blush);o.scale.set(.065,.03,1);place(o,side*.215,1.33,.006);}
+ for(const side of [-1,1]){const o=new THREE.Mesh(disc,blush);o.scale.set(.055,.026,1);place(o,side*.235,1.29,.006);}
  return face;
 }
 
@@ -154,7 +143,7 @@ function torsoGeometry(height,lowDetail){
 // hats) is enlarged about the neck, so the head is roughly as tall as the
 // body. Accessories built for the original head (reading glasses) are
 // picked up by height; props and floating effects keep their scale.
-export const HEAD_SCALE=1.3,NECK=new THREE.Vector3(0,1.1,0);
+export const HEAD_SCALE=1.46,NECK=new THREE.Vector3(0,1.06,0);
 function figureHead(g){
  g.updateMatrixWorld(true);const head=new THREE.Group();head.name='avatar-head';head.position.copy(NECK);head.scale.setScalar(HEAD_SCALE);
  const box=new THREE.Box3(),c=new THREE.Vector3();
@@ -174,7 +163,7 @@ export default function makeAvatar(data,cosmetics={},lowDetail=false){
  const soft=(color,lift=.2)=>'#'+new THREE.Color(color).lerp(new THREE.Color('#ffffff'),lift).getHexString();
  const m=(color,extra={})=>new THREE.MeshStandardMaterial({color,roughness:.8,emissive:color,emissiveIntensity:.06,...extra});
  const skinTone=soft(data.skin,.22),skin=m(skinTone,{roughness:.5,emissive:'#ff9c8c',emissiveIntensity:.07});
- const hairColor=cosmetics.hairColor??data.hair,hairTone=soft(hairColor,.04),hair=new THREE.MeshPhysicalMaterial({color:hairTone,roughness:.4,clearcoat:.45,clearcoatRoughness:.3,emissive:hairTone,emissiveIntensity:.05});
+ const hairColor=cosmetics.hairColor??data.hair,hairTone=soft(hairColor,.04),hair=new THREE.MeshPhysicalMaterial({color:hairTone,roughness:.5,clearcoat:.18,clearcoatRoughness:.5,emissive:hairTone,emissiveIntensity:.07});
  const dark=m('#3d4660'),gold=m('#e2cd9c',{metalness:.35,roughness:.4});
  // Chosen colours stay exactly as picked; a soft self-glow keeps them airy.
  const outfitColor=cosmetics.outfit==='tavern-waistcoat'?'#e9dfc8':cosmetics.outfitColor??({'forest-cape':'#698c76','moon-coat':'#d1c7d6','neon-jacket':'#405d74'})[cosmetics.outfit]??data.outfit,coat=m(outfitColor,{emissiveIntensity:.16,roughness:.75});
@@ -251,7 +240,7 @@ export function animateWearables(group,now,options={}){
  if(face&&!options.reducedMotion){
   if(now>=face.nextBlink){face.blinkUntil=now+120;face.nextBlink=now+2500+Math.random()*3500;}
   const closed=now<face.blinkUntil,target=closed?.1:1;
-  for(const eye of face.eyes){const y=.2*target;if(eye.scale.y!==y){eye.scale.y=y;changed=true;}}
+  for(const eye of face.eyes){const y=.23*target;if(eye.scale.y!==y){eye.scale.y=y;changed=true;}}
   const smile=1+.18*Math.max(0,Math.sin(now*.00021));if(face.mouth&&Math.abs(face.mouth.scale.x-smile)>.01){face.mouth.scale.x=smile;changed=true;}
  }
  return changed;
