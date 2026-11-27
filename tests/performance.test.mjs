@@ -153,3 +153,14 @@ test('characters get a contact shadow and leave the cached shadow map; cyber nig
  a.setTime({night:1});a.update(0);assert.equal(ring.visible,false,'no neon outside the cyber theme');
  a.setTheme(1);for(let n=0;n<120;n++)a.update(n*16);assert.equal(ring.visible,true);a.dispose();
 });
+
+test('night uplights wash every large building and skip bridges, small props and daylight',async()=>{
+ const THREE=await import('three');const {default:createWorldArt}=await import('../app/world-art.js');const {default:lightAtmosphere,collectFacades,facadeWashes,atmosphereLevels}=await import('../lib/../app/light-atmosphere.js');const {islands}=await import('../lib/archipelago.ts');
+ const {defaults}=await import('../lib/shared.ts');const root=new THREE.Group();createWorldArt({root,projects:defaults,phase:'gothic',lowDetail:false});
+ const facades=collectFacades(root),washes=facadeWashes(facades);assert.ok(washes.length>=40,`washes ${washes.length}`);
+ const near=(x,z,r)=>washes.some(w=>Math.hypot(w.x-x,w.z-z)<r);
+ const lit=islands.filter(i=>near(i.x,i.z,i.rx+2)).map(i=>i.id);assert.ok(lit.length>=5,`lit islands: ${lit}`);
+ assert.ok(near(0,-8,8),'the castle is lit');
+ assert.ok(washes.length<=260);const keys=new Set(washes.map(w=>Math.round(w.x/2.4)+':'+Math.round(w.z/2.4)+':'+Math.round(Math.sin(w.angle))+':'+Math.round(Math.cos(w.angle))));assert.equal(keys.size,washes.length,'no stacked fixtures');
+ const a=lightAtmosphere({root,islands});assert.ok(a.group.getObjectByName('building-uplights'));assert.ok(atmosphereLevels({noon:1}).pools<.05,'uplights follow the night level');a.dispose();
+});

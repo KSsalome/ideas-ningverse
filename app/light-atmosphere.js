@@ -38,6 +38,54 @@ export function collectLampPosts(root,{limit=320,spacing=.8}={}){
  return found.slice(0,limit);
 }
 
+// Wall and tower boxes recorded by batchStatic before merging, in world
+// space. Each box is a real wall, column cluster or tower, so a wash placed
+// on its face sits on the masonry instead of floating in front of it.
+export function collectFacades(root,{limit=600}={}){
+ root.updateMatrixWorld(true);const boxes=[];
+ root.traverse(o=>{if(/bridge/i.test(o.name))return;for(const local of o.userData.footprints??[]){const b=local.clone().applyMatrix4(o.matrixWorld),h=b.max.y-b.min.y,w=Math.max(b.max.x-b.min.x,b.max.z-b.min.z);if(h>=2.4&&w>=1.2)boxes.push(b);}});
+ return boxes.sort((a,b)=>(b.max.y-b.min.y)-(a.max.y-a.min.y)).slice(0,limit);
+}
+
+// Wash lights: a fan of light rising up each wall face from a fixture at its
+// foot. One fixture per 2.4-unit cell and facing, so theme variants of the
+// same wall and stacked parts never pile up light in one spot.
+export function facadeWashes(facades,{limit=260}={}){
+ const out=[],taken=new Set();
+ for(const b of facades){
+  const height=Math.min(b.max.y-b.min.y,16),cx=(b.min.x+b.max.x)/2,cz=(b.min.z+b.max.z)/2;
+  for(const [nx,nz,len,x0,z0]of [[0,1,b.max.x-b.min.x,cx,b.max.z],[0,-1,b.max.x-b.min.x,cx,b.min.z],[1,0,b.max.z-b.min.z,b.max.x,cz],[-1,0,b.max.z-b.min.z,b.min.x,cz]]){
+   if(len<1.2)continue;
+   const count=Math.max(1,Math.min(5,Math.round(len/3.2))),width=Math.min(2.8,len/count*.95);
+   for(let n=0;n<count;n++){
+    const along=((n+.5)/count-.5)*len,x=x0+nx*.06+(nz?along:0),z=z0+nz*.06+(nx?along:0);
+    const key=Math.round(x/2.4)+':'+Math.round(z/2.4)+':'+nx+':'+nz;if(taken.has(key))continue;taken.add(key);
+    out.push({x,y:b.min.y,z,angle:Math.atan2(nx,nz),width,height:height*.78});
+    if(out.length>=limit)return out;
+   }
+  }
+ }
+ return out;
+}
+
+const washVertex=`
+attribute float aSeed;varying vec2 vUv;varying float vSeed;
+void main(){vUv=uv;vSeed=aSeed;gl_Position=projectionMatrix*viewMatrix*modelMatrix*instanceMatrix*vec4(position,1.);}`;
+const washFragment=`
+uniform float uLevel,uNeon,uRose;uniform vec3 uWarm;varying vec2 vUv;varying float vSeed;
+void main(){
+ float x=abs(vUv.x-.5)*2.,y=vUv.y;
+ float spread=.22+.78*pow(y,.7);
+ float beam=1.-smoothstep(spread*.35,spread,x);
+ float fade=pow(1.-y,1.7);
+ float hot=exp(-y*9.)*(1.-smoothstep(.15,.6,x))*.9;
+ float pick=step(.5,fract(vSeed*.37));
+ vec3 neon=mix(vec3(.15,.9,1.),vec3(1.,.2,.8),pick);
+ vec3 color=mix(mix(uWarm,vec3(1.,.08,.14),uRose),neon,uNeon);
+ float a=(beam*fade*.8+hot)*uLevel*.6;
+ gl_FragColor=vec4(color*a,a);
+}`;
+
 const poolVertex=`
 attribute float aSeed;varying vec2 vUv;varying float vSeed;
 void main(){vUv=uv;vSeed=aSeed;gl_Position=projectionMatrix*viewMatrix*modelMatrix*instanceMatrix*vec4(position,1.);}`;
@@ -114,6 +162,19 @@ export default function lightAtmosphere({root,islands,sun=new THREE.Vector3(-38,
   pools.renderOrder=1;group.add(pools);parts.push(pools);
  }
 
+ // 1b. Uplights: every building gets wash lights at its foot after dark —
+ // crimson in 夜薔, cyan and magenta in the neon hours, amber otherwise.
+ const washUniforms={uLevel:{value:0},uNeon:neon,uRose:roseWeight,uWarm:{value:new THREE.Color('#ffb46a')}};
+ // At most a few dozen fixtures per island, tallest walls first, so the
+ // main island's many small walls do not crowd out the others.
+ const perIslandCap=limited?22:34,used=new Map();
+ const washes=facadeWashes(collectFacades(root),{limit:600}).filter(w=>{let best=null,d=Infinity;for(const i of islands){const e=Math.hypot(w.x-i.x,w.z-i.z);if(e<d){d=e;best=i.id;}}const n=used.get(best)??0;if(n>=perIslandCap)return false;used.set(best,n+1);return true;}).slice(0,limited?160:260);
+ if(washes.length){
+  const geometry=new THREE.PlaneGeometry(1,1).translate(0,.5,0),wash=instanced(geometry,additive(washUniforms,washVertex,washFragment),washes.length,'building-uplights');
+  washes.forEach((w,n)=>{p.set(w.x,w.y,w.z);q.setFromAxisAngle(new THREE.Vector3(0,1,0),w.angle);s.set(w.width,w.height,1);matrix.compose(p,q,s);wash.setMatrixAt(n,matrix);});
+  wash.material.side=THREE.DoubleSide;wash.renderOrder=2;group.add(wash);parts.push(wash);
+ }
+
  // 2. Shafts of light falling along the sun direction onto each island.
  const shaftUniforms={uLevel:{value:0},uTime:time,uNeon:neon,uColor:{value:new THREE.Color('#ffe2b0')}};
  const crossed=new THREE.PlaneGeometry(1,1).translate(0,.5,0),second=crossed.clone().rotateY(Math.PI/2);
@@ -160,7 +221,7 @@ void main(){
    if(!reducedMotion)time.value=now/1000;
    for(const key of ['pools','shafts','mist','neon','rose'])current[key]+=(target[key]-current[key])*.06;
    neon.value=current.neon;roseWeight.value=current.rose;mistUniforms.uColor.value.copy(mistBase).lerp(mistRose,current.rose*.4);ringUniforms.uLevel.value=current.neon*Math.max(current.pools,.35);ring.visible=ringUniforms.uLevel.value>.01;
-   poolUniforms.uLevel.value=current.pools;shaftUniforms.uLevel.value=current.shafts;mistUniforms.uLevel.value=current.mist;
+   poolUniforms.uLevel.value=current.pools;washUniforms.uLevel.value=Math.min(1,current.pools*1.15);shaftUniforms.uLevel.value=current.shafts;mistUniforms.uLevel.value=current.mist;
   },
   dispose(){group.removeFromParent();for(const m of parts){m.geometry.dispose();m.material.dispose();if(m.isInstancedMesh)m.dispose();}},
  };

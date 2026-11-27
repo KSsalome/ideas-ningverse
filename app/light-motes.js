@@ -38,41 +38,68 @@ export function moteIntensity({night=0,noon=0,dawn=0}={}){const base=Math.max(0,
 const vertexShader=`
 attribute vec4 aData;attribute vec3 aColor;
 uniform float uTime,uScale,uIntensity,uRose;
-varying vec3 vColor;varying float vAlpha;varying float vDark;
+varying vec3 vColor;varying float vAlpha;varying float vPetal;varying float vSpin;varying float vFlip;varying float vShade;
 void main(){
  float seed=aData.x,radius=aData.y,speed=aData.z,size=aData.w,t=uTime*speed;
+ vec3 p=position;
  // Hover in place: each mote wanders on its own slow loop, like dust in a
  // beam of light, instead of rising away and respawning.
- vec3 p=position;
- p.x+=(sin(t*.7+seed)*.65+sin(t*.31+seed*2.3)*.35)*radius;
- p.z+=(cos(t*.6+seed*1.3)*.65+cos(t*.27+seed*.7)*.35)*radius;
- p.y+=(sin(t*.9+seed*3.1)*.6+sin(t*.43+seed)*.4)*radius*.7;
+ vec3 hover=vec3((sin(t*.7+seed)*.65+sin(t*.31+seed*2.3)*.35)*radius,
+                 (sin(t*.9+seed*3.1)*.6+sin(t*.43+seed)*.4)*radius*.7,
+                 (cos(t*.6+seed*1.3)*.65+cos(t*.27+seed*.7)*.35)*radius);
+ // 夜薔: petals fall in a long, swaying glide, drifting with a light breeze,
+ // then loop back above the island. Fading at both ends hides the loop.
+ float cycle=fract(uTime*speed*.075+seed*.137);
+ vec3 fall=vec3(sin(uTime*.8*speed+seed)*1.5+cycle*2.6,6.-cycle*12.,cos(uTime*.65*speed+seed*1.7)*1.1+cycle*1.4);
+ p+=mix(hover,fall,uRose);
  vec4 mv=modelViewMatrix*vec4(p,1.);
  gl_Position=projectionMatrix*mv;
  float twinkle=.55+.45*sin(uTime*(1.3+fract(seed)*1.7)+seed*6.283);
  float breathe=.6+.4*sin(t*.23+seed*4.);
- vAlpha=twinkle*breathe*uIntensity;
- // 夜薔: embers of crimson and scarlet, and about a third of the motes turn
- // into dark petals with a red rim that read as black against the glow.
+ float ends=smoothstep(0.,.12,cycle)*(1.-smoothstep(.86,1.,cycle));
+ // Most motes become petals; a few stay as glowing embers among them.
+ vPetal=uRose*step(.2,fract(seed*.77));
+ vAlpha=mix(twinkle*breathe,mix(1.,ends,uRose),vPetal)*uIntensity*(1.+uRose*.4);
+ // Each petal turns in the air (spin) and tumbles end over end (flip).
+ vSpin=seed*6.283+uTime*(.5+fract(seed*1.9)*.9)*(fract(seed*.41)<.5?-1.:1.);
+ vFlip=cos(uTime*(1.1+fract(seed*3.3)*1.3)+seed);
  float pick=fract(seed*.53);
- vec3 rose=pick<.5?vec3(1.,.13,.2):pick<.8?vec3(.72,.02,.1):vec3(1.,.38,.24);
- vColor=mix(aColor,rose,uRose);
- vDark=uRose*step(fract(seed*.311),.36);
- gl_PointSize=size*uScale*(.75+.25*twinkle)*(1.+uRose*.35);
- vAlpha*=1.+uRose*.5;
+ vec3 rose=pick<.45?vec3(.62,.04,.12):pick<.8?vec3(.82,.1,.2):vec3(.28,.02,.06);
+ vColor=mix(aColor,mix(vec3(1.,.3,.18),rose,vPetal),uRose);
+ vShade=pick;
+ gl_PointSize=size*uScale*mix(.75+.25*twinkle,1.75,vPetal);
 }`;
 const fragmentShader=`
-uniform float uRose;varying vec3 vColor;varying float vAlpha;varying float vDark;
+uniform float uRose;varying vec3 vColor;varying float vAlpha;varying float vPetal;varying float vSpin;varying float vFlip;varying float vShade;
 void main(){
- vec2 d=gl_PointCoord-.5;float r=length(d)*2.;
+ vec2 d=gl_PointCoord-.5;
+ if(vPetal>.5){
+  // Rose petal: rounded top with a soft notch, tapering to the base,
+  // squeezed by the tumble so it reads as a thin petal turning over.
+  float c=cos(vSpin),s=sin(vSpin);vec2 q=vec2(c*d.x-s*d.y,s*d.x+c*d.y)*2.;
+  float flip=max(abs(vFlip),.22);q.x/=flip;
+  float y=q.y*1.05;
+  float width=.62*sqrt(max(0.,1.-y*y))*(.45+.55*clamp((y+1.)*.5,0.,1.));
+  float notch=smoothstep(.12,0.,abs(q.x))*smoothstep(.62,.95,y)*.28;
+  float edge=width-abs(q.x);
+  float inside=smoothstep(0.,.07,edge)*smoothstep(-.98,-.85,y)*(1.-smoothstep(.95-notch,1.-notch,y));
+  if(inside<.01)discard;
+  // Deeper at the base, lighter crimson at the rim; the back face is darker.
+  float rim=1.-smoothstep(0.,.25,edge);
+  vec3 col=mix(vColor*.55,vColor,clamp((y+1.)*.6,0.,1.));
+  col=mix(col,vColor*1.35+vec3(.06,0.,.01),rim*.55);
+  col*=mix(.55,1.,step(0.,vFlip))*(.9+.1*vShade);
+  float a=inside*vAlpha*.92;
+  gl_FragColor=vec4(col*a,a);
+  return;
+ }
+ float r=length(d)*2.;
  if(r>1.)discard;
  float glow=pow(1.-r,1.7),core=smoothstep(.3,0.,r);
  float a=(glow*.9+core*.8)*vAlpha;
- vec3 light=mix(vColor,vec3(1.,.82,.8),core*mix(.55,.18,uRose)*(1.-vDark));
- // Dark petals: a near-black body over the scene with a thin red rim.
- float body=smoothstep(.75,.35,r)*vDark;
- vec3 color=mix(light*a,vec3(.04,0.,.01)*.9+vColor*glow*.25,body);
- gl_FragColor=vec4(color,body*vAlpha*.95);
+ vec3 light=mix(vColor,vec3(1.,.82,.8),core*mix(.55,.25,uRose));
+ // Glowing motes write alpha 0, so they add light like before.
+ gl_FragColor=vec4(light*a,0.);
 }`;
 
 export default function lightMotes({islands,limited=false,lowDetail=false,reducedMotion=false}){
