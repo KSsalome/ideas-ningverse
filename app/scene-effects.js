@@ -39,11 +39,15 @@ export default function sceneEffects({renderer,scene,camera,lowDetail=false,phas
  if(!lowDetail){
   renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=theme.exposure*(reading?.86:bar?.92:interior?.94:1.06);
   const generator=new THREE.PMREMGenerator(renderer),room=new RoomEnvironment();environment=generator.fromScene(room,.04);scene.environment=environment.texture;scene.environmentIntensity=reading?.18:interior?.22:.3;room.dispose();generator.dispose();
-  if(quality.bloomHz>0){blackMesh=new THREE.MeshBasicMaterial({color:0,side:THREE.DoubleSide,fog:false});blackLine=new THREE.LineBasicMaterial({color:0,fog:false});
-  bloomComposer=new EffectComposer(renderer);bloomComposer.renderToScreen=false;bloomComposer.setPixelRatio(1);bloomComposer.addPass(new RenderPass(scene,camera));bloomComposer.addPass(new UnrealBloomPass(new THREE.Vector2(256,256),.16,.25,1.08));
+  // Glow is taken from the finished frame: only pixels brighter than the
+  // threshold (lamps, windows, neon, embers) bloom. The old approach redrew
+  // the whole scene into a masked glow target several times a second, which
+  // doubled the cost of those frames and showed up as a periodic hitch.
+  // This costs the same small, fixed amount of fill every frame.
+  if(quality.bloomHz>0){
   composer=new EffectComposer(renderer);composer.addPass(new RenderPass(scene,camera));
-  const composite=new ShaderPass({uniforms:{tDiffuse:{value:null},bloomTexture:{value:bloomComposer.renderTarget2.texture}},vertexShader:'varying vec2 vUv; void main(){vUv=uv;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}',fragmentShader:'uniform sampler2D tDiffuse; uniform sampler2D bloomTexture; varying vec2 vUv; void main(){vec4 base=texture2D(tDiffuse,vUv); vec3 halo=texture2D(bloomTexture,vUv).rgb; gl_FragColor=vec4(base.rgb+min(halo,vec3(1.5))*.18,base.a);}'});
-  composer.addPass(composite);composer.addPass(new OutputPass());}
+  const glow=new UnrealBloomPass(new THREE.Vector2(512,512),.15,.28,1.02);glow.name='frame-glow';composer.addPass(glow);
+  composer.addPass(new OutputPass());}
   if(!interior){const c=document.createElement('canvas');c.width=c.height=128;const ctx=c.getContext('2d'),gradient=ctx.createRadialGradient(64,64,0,64,64,64);gradient.addColorStop(0,'rgba(156,172,192,.16)');gradient.addColorStop(.5,'rgba(134,154,179,.06)');gradient.addColorStop(1,'rgba(134,154,179,0)');ctx.fillStyle=gradient;ctx.fillRect(0,0,128,128);cloudTexture=new THREE.CanvasTexture(c);const random=seeded(451),clouds=new THREE.Group();clouds.name='floating-cloud-sea';scene.add(clouds);for(let n=0;n<(mobile?12:22);n++){const material=new THREE.SpriteMaterial({map:cloudTexture,transparent:true,opacity:.38,depthWrite:false,color:theme.fog});const cloud=new THREE.Sprite(material);cloud.position.set((random()-.5)*240,-11-random()*12,(random()-.5)*160);cloud.scale.set(30+random()*35,18+random()*20,1);clouds.add(cloud);}}
  }
  let libraryMode=null,factoryMode=null;
@@ -82,18 +86,12 @@ export default function sceneEffects({renderer,scene,camera,lowDetail=false,phas
   },
   setLibraryLighting(state){if(!reading||libraryMode===state.mode)return;libraryMode=state.mode;ambient.color.set(state.ambient);hemisphere.color.set(state.light);key.color.set(state.light);key.intensity=lowDetail?.48:state.key;key.position.set(-2,17,4);key.target.position.set(0,1,-7);if(interiorLights[0]){interiorLights[0].color.set(state.light);interiorLights[0].intensity=state.fill;interiorLights[0].position.set(0,10.2,-5);}},
   setFactoryLighting(state){if(!bar||factoryMode===state.mode)return;factoryMode=state.mode;ambient.intensity=lowDetail?state.ambient*2.7:state.ambient;key.intensity=lowDetail?state.key*1.4:state.key;for(const light of interiorLights)light.intensity=light.userData.basePower*state.fill;},
-  resize(w,h){if(composer){composer.setPixelRatio(renderer.getPixelRatio());composer.setSize(w,h);}bloomComposer?.setSize(Math.ceil(w*.4),Math.ceil(h*.4));lastBloom=-Infinity;},
+  resize(w,h){if(composer){composer.setPixelRatio(renderer.getPixelRatio());composer.setSize(w,h);}},
   render(now=performance.now(),updatingShadow=false){
    if(!composer){
     renderer.render(scene,camera);
     if(lowDetail&&transparentBackground)renderer.domElement.style.backgroundColor='transparent';
     return;
-   }
-   // Spread the full-scene passes across frames once the bloom texture exists.
-   if(lastBloom===-Infinity||!updatingShadow&&now-lastBloom>=1000/quality.bloomHz){
-    const shadows=renderer.shadowMap.enabled;
-    try{renderer.shadowMap.enabled=false;withBloomMask(scene,()=>bloomComposer.render(),blackMesh,blackLine);lastBloom=now;}
-    finally{renderer.shadowMap.enabled=shadows;}
    }
    composer.render();
   },
