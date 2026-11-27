@@ -1,8 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
-import sceneBudget,{sceneProfile,frameGate,resolutionBudget,projectionGate,freezeStaticTransforms} from '../app/scene-performance.js';
+import sceneBudget,{sceneProfile,frameGate,resolutionBudget,projectionGate,freezeStaticTransforms,trackLocalLights} from '../app/scene-performance.js';
 import {withBloomMask} from '../app/scene-effects.js';
+import {advanceRoute} from '../lib/navigation.ts';
 
 test('mobile and wide displays have finite pixel budgets without changing logical canvas dimensions',()=>{
  for(const [width,height,dpr,coarse]of [[390,844,3,true],[844,390,3,true],[1920,1080,2,false],[3840,2160,2,false]]){const q=sceneProfile({width,height,dpr,coarse});assert.ok(width*height*q.ratio*q.ratio<=q.pixelBudget+1);assert.ok(q.ratio<=dpr&&q.ratio<=q.maxRatio);assert.equal(q.bloomHz,coarse?0:15);assert.equal(q.shadowSize,coarse?512:1024);assert.equal(q.fps,coarse?30:60);}
@@ -17,9 +18,53 @@ test('sustained slow rendering lowers resolution within bounds and hysteresis pr
  const q=resolutionBudget({ratio:1.25,minRatio:.75,fps:30});for(let n=0;n<150;n++)q.sample(n*70);assert.ok(q.ratio<1.25&&q.ratio>=.75);const reduced=q.ratio;for(let n=0;n<150;n++)q.sample(11000+n*33.34);assert.equal(q.ratio,reduced);for(let n=0;n<900;n++)q.sample(17000+n*33.34);assert.ok(q.ratio>=reduced&&q.ratio<=1.25);q.reset();assert.equal(q.sample(120000),false);
 });
 
-function fakeRenderer(){return{ratio:1,shadowMap:{autoUpdate:true,needsUpdate:false},setPixelRatio(r){this.ratio=r;},getPixelRatio(){return this.ratio;},setSize(w,h){this.size=[w,h];}};}
-test('SVG draws once at rest and redraws for movement, explicit changes, resize and modal close',()=>{
- const renderer=fakeRenderer(),budget=sceneBudget({container:{clientWidth:390,clientHeight:844},renderer,svg:true}),effect={render(){this.draws=(this.draws??0)+1;},resize(){}};budget.resize(390,844);assert.equal(budget.render(effect,0),true);for(let t=300;t<10000;t+=300)assert.equal(budget.render(effect,t),false);assert.equal(effect.draws,1);assert.equal(budget.render(effect,10000,{moving:true}),true);assert.equal(budget.render(effect,10010,{moving:true}),false);assert.equal(budget.render(effect,10300),true);budget.step(10400,true);assert.equal(budget.step(10500),true);assert.equal(budget.render(effect,10600),true);budget.resize(320,740);assert.deepEqual(renderer.size,[320,740]);assert.equal(budget.render(effect,11000),true);
+function fakeRenderer(){return{ratio:1,domElement:{style:{}},shadowMap:{autoUpdate:true,needsUpdate:false},getPixelRatio(){return this.ratio;},setSize(w,h){this.size=[w,h];},setDrawingBufferSize(w,h,ratio){this.size=[w,h];this.ratio=ratio;this.bufferResizes=(this.bufferResizes??0)+1;}};}
+
+test('adaptive resolution leaves GPU buffers in place during a six-second walk',()=>{
+ const renderer=fakeRenderer(),budget=sceneBudget({container:{clientWidth:390,clientHeight:844},renderer});
+ let effectResizes=0;
+ const effects={render(){},resize(){effectResizes++;}};
+ budget.resize(390,844);
+ for(let now=0;now<=6000;now+=50){
+  assert.equal(budget.step(now),true);
+  budget.render(effects,now,{moving:true});
+ }
+ assert.equal(renderer.bufferResizes,1);
+ assert.equal(effectResizes,0);
+ budget.render(effects,6100);
+ assert.equal(renderer.bufferResizes,1);
+ budget.render(effects,6250);
+ assert.equal(renderer.bufferResizes,2);
+ assert.equal(effectResizes,1);
+ assert.ok(renderer.ratio<1);
+ assert.deepEqual(renderer.domElement.style,{width:'390px',height:'844px'});
+});
+test('SVG redraws fast movement at 30fps and skips redraws at rest',()=>{
+ const renderer=fakeRenderer(),budget=sceneBudget({container:{clientWidth:390,clientHeight:844},renderer,svg:true}),effect={render(){this.draws=(this.draws??0)+1;},resize(){}};budget.resize(390,844);assert.equal(budget.render(effect,0),true);for(let t=300;t<10000;t+=300)assert.equal(budget.render(effect,t),false);assert.equal(effect.draws,1);assert.equal(budget.render(effect,10000,{moving:true}),true);assert.equal(budget.render(effect,10010,{moving:true}),false);assert.equal(budget.render(effect,10034,{moving:true}),true);assert.equal(budget.render(effect,10068,{moving:true}),true);assert.equal(budget.render(effect,10300),false);budget.step(10400,true);assert.equal(budget.step(10500),true);assert.equal(budget.render(effect,10600),true);budget.resize(320,740);assert.deepEqual(renderer.size,[320,740]);assert.equal(budget.render(effect,11000),true);
+});
+
+test('distant fixtures skip sorting and refresh as soon as the camera enters their range',()=>{
+ const light={visible:true},refresh=trackLocalLights([light],{x:0,z:0},10,1);
+ assert.equal(refresh({x:10.2,z:0}),false);
+ assert.equal(light.visible,false);
+ assert.equal(refresh({x:9.9,z:0}),true);
+ light.visible=true;
+ assert.equal(refresh({x:9.8,z:0}),false);
+ assert.equal(refresh({x:10.1,z:0}),false);
+ assert.equal(light.visible,false);
+ assert.equal(refresh({x:9.9,z:0}),true);
+});
+
+test('automatic walking uses the whole movement budget through a waypoint without cutting the corner',()=>{
+ const player={x:.9,z:0},route=[{x:1,z:0},{x:1,z:1}];
+ assert.equal(advanceRoute(player,route,.25),0);
+ assert.equal(player.x,1);
+ assert.ok(Math.abs(player.z-.15)<1e-9);
+ assert.equal(route.length,1);
+ assert.equal(advanceRoute(player,route,2),0);
+ assert.deepEqual(player,{x:1,z:1});
+ assert.equal(route.length,0);
+ assert.equal(advanceRoute(player,route,1),null);
 });
 
 test('native budget keeps a 30fps schedule and refreshes shadows at 10Hz without changing the camera or material data',()=>{

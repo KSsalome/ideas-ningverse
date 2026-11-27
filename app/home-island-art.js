@@ -1,3 +1,4 @@
+import {trackLocalLights} from './scene-performance.js';
 import * as THREE from 'three';
 import artKit from './art-kit.js';
 import architectureDetail from './architecture-detail.js';
@@ -132,8 +133,8 @@ export default function createHomeIsland({root,island,phase=exteriorBasePhase,lo
  const lampState=lights.map(light=>({power:light.intensity,color:light.color.clone()}));let dawnWeight=0,dawnTime=0,lampNight=false;
  function applyLamps(){for(const [m,b]of lampGlows){m.color.copy(b.color).multiplyScalar(1-dawnWeight*(.04+dawnTime*.22));if(m.emissive)m.emissiveIntensity=b.power*(1-dawnWeight*(.08+dawnTime*.35));if(m.transparent)m.opacity=b.opacity*(1-dawnWeight*(.2+dawnTime*.4));}lights.forEach((light,n)=>{light.intensity=lampState[n].power*(1-dawnWeight*(.12+dawnTime*.48));light.color.copy(lampState[n].color);});poolMaterial.opacity=(lampNight?.3:.14)*(1-dawnWeight*(.2+dawnTime*.4));haloMaterial.opacity=(lampNight?.25:.16)*(1-dawnWeight*(.2+dawnTime*.4));}
  function setDawnProgress(weight,progress){dawnWeight=THREE.MathUtils.clamp(weight,0,1);dawnTime=THREE.MathUtils.clamp(progress,0,1);applyLamps();}
- let lastX=Infinity,lastZ=Infinity;
- function updateLights(target){if(Math.hypot(target.x-lastX,target.z-lastZ)<1)return;lastX=target.x;lastZ=target.z;const ordered=lamps.slice().sort((a,b)=>Math.hypot(a.x-target.x,a.z-target.z)-Math.hypot(b.x-target.x,b.z-target.z));root.updateWorldMatrix(true,false);lights.forEach((light,n)=>{light.visible=Math.hypot(target.x-island.x,target.z-island.z)<island.rx+24;light.position.copy(root.worldToLocal(ordered[n].clone()));});}
+ const refreshLights=trackLocalLights(lights,island,island.rx+24,1);
+ function updateLights(target){if(!refreshLights(target))return;const ordered=lamps.slice().sort((a,b)=>Math.hypot(a.x-target.x,a.z-target.z)-Math.hypot(b.x-target.x,b.z-target.z));root.updateWorldMatrix(true,false);lights.forEach((light,n)=>{light.visible=true;light.position.copy(root.worldToLocal(ordered[n].clone()));});}
  updateLights({x:island.x,z:island.z});
  function proxy(parent){
   parent.userData.artDirection='limestone-tiered-citadel-proxy';const disk=ellipse(parent,0,-.4,0,island.rx,island.rz,.8,m.wall);disk.renderOrder=-800;const under=ellipse(parent,0,-4.6,0,island.rx*.95,island.rz*.95,7.4,k.mat('#756c5e'));under.renderOrder=-1000;
