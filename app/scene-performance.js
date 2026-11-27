@@ -2,7 +2,7 @@ import * as THREE from 'three';
 // Rendering budgets change sampling cost, never layout, models or navigation.
 export function sceneProfile({width=1280,height=800,dpr=1,coarse=false,memory=8,cores=8}={}){
  const compact=width<700||coarse,limited=compact||(memory<=4&&cores<=4),pixelBudget=limited?800000:2200000,maxRatio=limited?1.25:1.5;
- return{limited,fps:limited?30:60,pixelBudget,maxRatio,minRatio:limited?.75:1,ratio:Math.min(dpr,maxRatio,Math.sqrt(pixelBudget/Math.max(1,width*height))),shadowSize:limited?512:1024,shadowHz:limited?10:20,bloomHz:limited?0:15,reflectionHz:limited?8:12};
+ return{limited,fps:limited?30:60,pixelBudget,maxRatio,minRatio:limited?.75:1,ratio:Math.min(dpr,maxRatio,Math.sqrt(pixelBudget/Math.max(1,width*height))),shadowSize:limited?1024:2048,shadowHz:limited?10:20,bloomHz:limited?0:15,reflectionHz:limited?8:12};
 }
 export function frameGate(fps=60){let last=-Infinity,interval=1000/fps;return{setFps(next){interval=1000/next;},get fps(){return 1000/interval;},step(now){const elapsed=now-last;if(elapsed<interval-.5)return false;last=Number.isFinite(last)?last+Math.max(1,Math.floor((elapsed+.5)/interval))*interval:now;return true;},reset(){last=-Infinity;}};}
 // Idle throttling: after a quiet spell with no input and no camera or player

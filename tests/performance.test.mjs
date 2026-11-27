@@ -6,7 +6,7 @@ import {withBloomMask} from '../app/scene-effects.js';
 import {advanceRoute} from '../lib/navigation.ts';
 
 test('mobile and wide displays have finite pixel budgets without changing logical canvas dimensions',()=>{
- for(const [width,height,dpr,coarse]of [[390,844,3,true],[844,390,3,true],[1920,1080,2,false],[3840,2160,2,false]]){const q=sceneProfile({width,height,dpr,coarse});assert.ok(width*height*q.ratio*q.ratio<=q.pixelBudget+1);assert.ok(q.ratio<=dpr&&q.ratio<=q.maxRatio);assert.equal(q.bloomHz,coarse?0:15);assert.equal(q.shadowSize,coarse?512:1024);assert.equal(q.fps,coarse?30:60);}
+ for(const [width,height,dpr,coarse]of [[390,844,3,true],[844,390,3,true],[1920,1080,2,false],[3840,2160,2,false]]){const q=sceneProfile({width,height,dpr,coarse});assert.ok(width*height*q.ratio*q.ratio<=q.pixelBudget+1);assert.ok(q.ratio<=dpr&&q.ratio<=q.maxRatio);assert.equal(q.bloomHz,coarse?0:15);assert.equal(q.shadowSize,coarse?1024:2048);assert.equal(q.fps,coarse?30:60);}
  const limited=sceneProfile({width:1100,memory:4,cores:4});assert.equal(limited.fps,30);assert.equal(limited.bloomHz,0);
 });
 
@@ -121,4 +121,14 @@ test('tiny props stop casting shadows but avatars keep theirs',async()=>{
  avatar.userData.keepShadow=true;avatar.add(hand);for(const m of [tiny,tower,hand])m.castShadow=true;root.add(tiny,tower,avatar);
  assert.deepEqual(pruneShadowCasters(root),{kept:2,pruned:1});
  assert.equal(tiny.castShadow,false);assert.equal(tower.castShadow,true);assert.equal(hand.castShadow,true);
+});
+
+test('light atmosphere adds lamp pools, sun shafts and mist in three draw calls, faded by time of day',async()=>{
+ const THREE=await import('three');const {default:lightAtmosphere,atmosphereLevels,collectLampPosts}=await import('../app/light-atmosphere.js');const {islands}=await import('../lib/archipelago.ts');
+ const root=new THREE.Group();for(const [x,z]of [[0,0],[5,2],[5.3,2.2],[-8,4]]){const g=new THREE.Group();g.position.set(x,8,z);g.userData.lampPost={h:2.7};root.add(g);}
+ assert.equal(collectLampPosts(root).length,3,'lamps closer than the spacing merge into one pool');
+ const night=atmosphereLevels({night:1}),noon=atmosphereLevels({noon:1}),dawn=atmosphereLevels({dawn:1});
+ assert.ok(night.pools>noon.pools*4,'lamp pools belong to the night');assert.ok(dawn.shafts>noon.shafts&&dawn.mist>noon.mist,'dawn has the strongest shafts and mist');
+ const a=lightAtmosphere({root,islands});assert.equal(a.group.children.length,3);assert.ok(a.group.children.every(m=>m.isInstancedMesh&&!m.castShadow));assert.equal(a.lamps,3);
+ assert.equal(lightAtmosphere({root,islands,lowDetail:true}).group,null);a.dispose();
 });
