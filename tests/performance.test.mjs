@@ -37,3 +37,26 @@ test('static transform caching preserves world hit positions while declared anim
 test('cached bloom mask ignores hidden districts and restores all visible source materials',()=>{
  const scene=new THREE.Scene(),hidden=new THREE.Group(),visible=new THREE.Mesh(new THREE.BoxGeometry(),new THREE.MeshBasicMaterial()),secret=visible.clone();hidden.visible=false;hidden.add(secret);scene.add(visible,hidden);const original=visible.material,old=secret.material,black=new THREE.MeshBasicMaterial();withBloomMask(scene,()=>{assert.equal(visible.material,black);assert.equal(secret.material,old);},black,black);assert.equal(visible.material,original);assert.equal(secret.material,old);visible.geometry.dispose();original.dispose();black.dispose();
 });
+
+test('idle scenes drop to a lower frame and shadow rate, and any activity restores full rate',async()=>{
+ const {idleProfile,isIdle,IDLE_AFTER_MS}=await import('../app/scene-performance.js');
+ const phone=sceneProfile({width:390,height:844,dpr:3,coarse:true}),desk=sceneProfile({width:1920,height:1080,dpr:1});
+ assert.equal(idleProfile(phone).fps,15);assert.equal(idleProfile(desk).fps,30);assert.ok(idleProfile(phone).shadowHz<phone.shadowHz);
+ assert.equal(isIdle(IDLE_AFTER_MS-1,-Infinity,0),false);assert.equal(isIdle(IDLE_AFTER_MS+1,-Infinity,0),true);
+ assert.equal(isIdle(IDLE_AFTER_MS+1,IDLE_AFTER_MS,0),false,'recent camera or player movement keeps full rate');
+ const gate=frameGate(30);let ticks=0;for(let n=0;n<120;n++)if(gate.step(n*1000/60))ticks++;assert.ok(Math.abs(ticks-60)<=1);
+ gate.setFps(15);ticks=0;for(let n=120;n<240;n++)if(gate.step(n*1000/60))ticks++;assert.ok(Math.abs(ticks-30)<=1,`idle ticks ${ticks}`);
+});
+
+test('light motes are a single GPU-animated draw call sized to the device',async()=>{
+ const {default:lightMotes,moteCount,moteLayout,moteIntensity}=await import('../app/light-motes.js');
+ const {islands}=await import('../lib/archipelago.ts');
+ assert.equal(moteCount({lowDetail:true}),0);assert.ok(moteCount({limited:true})<moteCount({}));
+ const layout=moteLayout(islands,300);assert.equal(layout.count,300);
+ for(let n=0;n<300;n++){const x=layout.position[n*3],z=layout.position[n*3+2];assert.ok(islands.some(i=>((x-i.x)/i.rx)**2+((z-i.z)/i.rz)**2<=1.17+1e-6),'every mote starts above an island');}
+ assert.ok(moteIntensity({night:1})>moteIntensity({noon:1}));
+ const motes=lightMotes({islands,limited:true});assert.ok(motes.points.isPoints);assert.equal(motes.points.geometry.attributes.position.count,moteCount({limited:true}));
+ const t=motes.points.material.uniforms.uTime;motes.update(5000,{zoom:3,pixelRatio:1.25});assert.equal(t.value,5);
+ const still=lightMotes({islands,reducedMotion:true});still.update(5000);assert.equal(still.points.material.uniforms.uTime.value,0,'reduced motion freezes drift');
+ motes.dispose();still.dispose();
+});

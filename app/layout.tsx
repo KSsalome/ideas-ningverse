@@ -12,6 +12,12 @@ export const metadata: Metadata = {
   },
 };
 
+// Web fonts load without blocking the first paint: system fonts show at once,
+// then swap to Noto when ready (display=swap). Only weights used in the CSS.
+const FONT_URL =
+  "https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;700&family=Noto+Serif+TC:wght@400;500&display=swap";
+const FONT_LOADER = `(function(){var l=document.createElement('link');l.rel='stylesheet';l.href=${JSON.stringify(FONT_URL)};document.head.appendChild(l);})();`;
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -19,6 +25,14 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="zh-Hant">
+      <head>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
+        <script dangerouslySetInnerHTML={{ __html: FONT_LOADER }} />
+        <noscript>
+          <link rel="stylesheet" href={FONT_URL} />
+        </noscript>
+      </head>
       <body className="antialiased">{children}</body>
     </html>
   );

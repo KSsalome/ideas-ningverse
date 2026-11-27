@@ -13,7 +13,7 @@ export default function createMuseum({container,entries,avatar,equipped,initialP
  const scene=new THREE.Scene();let renderer,svg=false,lastRender=0;try{renderer=new THREE.WebGLRenderer({antialias:true,powerPreference:'high-performance'});}catch{renderer=new SVGRenderer();renderer.setQuality('low');renderer.setPrecision(2);svg=true;}
  const reducedMotion=typeof matchMedia!=='undefined'&&matchMedia('(prefers-reduced-motion: reduce)').matches;
  const budget=sceneBudget({container,renderer,svg}),projectLabels=projectionGate();
- if(!svg){renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;}renderer.outputColorSpace=THREE.SRGBColorSpace;renderer.domElement.setAttribute('aria-label','可沿中央樓梯探索三層攝影、Cosplay 與繪圖展廊的希臘神殿美術館');container.appendChild(renderer.domElement);
+ if(!svg){renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFShadowMap;}renderer.outputColorSpace=THREE.SRGBColorSpace;renderer.domElement.setAttribute('aria-label','可沿中央樓梯探索三層攝影、Cosplay 與繪圖展廊的希臘神殿美術館');container.appendChild(renderer.domElement);
  const camera=new THREE.PerspectiveCamera(54,1,.1,170),controls=new OrbitControls(camera,renderer.domElement);controls.enableDamping=true;controls.rotateSpeed=.5;
  const layout=museumLayout(entries),art=createMuseumInterior({scene,layout,lowDetail:svg}),k=art.kit,m=k.materials,effects=sceneEffects({renderer,scene,camera,lowDetail:svg,phase:'medieval',interior:true,profile:'museum',lightSources:art.lightSources,performanceProfile:budget.quality}),textures=new Set(),loader=new THREE.TextureLoader(),spots=[];
  const {frames,clickables,levels:frameLevels}=museumExhibits({scene,kit:k,entries,layout,lowDetail:svg});
