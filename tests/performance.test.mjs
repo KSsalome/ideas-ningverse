@@ -164,3 +164,13 @@ test('night uplights wash every large building and skip bridges, small props and
  assert.ok(washes.length<=260);const keys=new Set(washes.map(w=>Math.round(w.x/2.4)+':'+Math.round(w.z/2.4)+':'+Math.round(Math.sin(w.angle))+':'+Math.round(Math.cos(w.angle))));assert.equal(keys.size,washes.length,'no stacked fixtures');
  const a=lightAtmosphere({root,islands});assert.ok(a.group.getObjectByName('building-uplights'));assert.ok(atmosphereLevels({noon:1}).pools<.05,'uplights follow the night level');a.dispose();
 });
+
+test('island undersides hang rocks from the real rock surface in three matte instanced draws',async()=>{
+ const THREE=await import('three');const {default:createWorldArt}=await import('../app/world-art.js');const {default:islandUnderside}=await import('../app/island-underside.js');const {islands}=await import('../lib/archipelago.ts');const {defaults}=await import('../lib/shared.ts');
+ const root=new THREE.Group(),art=createWorldArt({root,projects:defaults,phase:'medieval',lowDetail:false});root.updateMatrixWorld(true);
+ const u=islandUnderside({islands,districts:art.districts});assert.equal(u.group.children.length,3);
+ const rocks=u.group.getObjectByName('underside-hanging-rocks');assert.ok(rocks.count>=islands.length*8,`rocks ${rocks.count}`);
+ const m=new THREE.Matrix4(),p=new THREE.Vector3();for(let n=0;n<rocks.count;n++){rocks.getMatrixAt(n,m);p.setFromMatrixPosition(m);const i=islands.reduce((a,b)=>Math.hypot(p.x-b.x,p.z-b.z)<Math.hypot(p.x-a.x,p.z-a.z)?b:a);assert.ok(p.y<i.height,'rocks hang below the island surface');}
+ assert.ok(u.group.children.every(m=>!m.castShadow&&m.material.emissive.getHex()===0),'matte, no glow, no shadow cost');
+ assert.equal(islandUnderside({islands,districts:art.districts,lowDetail:true}).group,null);u.dispose();
+});

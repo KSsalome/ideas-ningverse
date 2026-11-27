@@ -37,7 +37,7 @@ export default function sceneEffects({renderer,scene,camera,lowDetail=false,phas
  scene.add(key);const rim=new THREE.DirectionalLight(bar?'#bb9363':'#8faacb',bar?.16:lowDetail?.12:interior?.28:.4);rim.position.set(45,30,-60);scene.add(rim);
  const interiorLights=[];if(interior&&!lowDetail){const specs=bar?(lightSources??[]).slice(0,6).map(s=>[...s.position,s.power,s.color,s.distance]):museum?(lightSources??[]).slice(0,3).map(s=>[...s.position,s.power,s.color,s.distance]):reading?[[0,8,-.5,28],[-5,3,-11,12],[5,3,-11,12]]:[[0,8,-.5,38],[-5,3,-11,14],[5,3,-11,14]];for(const [x,y,z,power,color,distance]of specs){const light=new THREE.PointLight(bar||museum?(color??'#ffce8a'):'#ffd49a',power,bar||museum?(distance??11):14,2);light.position.set(x,y,z);light.userData.basePower=power;if(bar)light.name='factory-bounded-interior-light';if(museum)light.name='museum-bounded-atrium-light';scene.add(light);interiorLights.push(light);}}
  if(!lowDetail){
-  renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=theme.exposure*(reading?.86:bar?.92:interior?.94:1);
+  renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=theme.exposure*(reading?.86:bar?.92:interior?.94:1.06);
   const generator=new THREE.PMREMGenerator(renderer),room=new RoomEnvironment();environment=generator.fromScene(room,.04);scene.environment=environment.texture;scene.environmentIntensity=reading?.18:interior?.22:.3;room.dispose();generator.dispose();
   if(quality.bloomHz>0){blackMesh=new THREE.MeshBasicMaterial({color:0,side:THREE.DoubleSide,fog:false});blackLine=new THREE.LineBasicMaterial({color:0,fog:false});
   bloomComposer=new EffectComposer(renderer);bloomComposer.renderToScreen=false;bloomComposer.setPixelRatio(1);bloomComposer.addPass(new RenderPass(scene,camera));bloomComposer.addPass(new UnrealBloomPass(new THREE.Vector2(256,256),.16,.25,1.08));
@@ -48,8 +48,8 @@ export default function sceneEffects({renderer,scene,camera,lowDetail=false,phas
  }
  let libraryMode=null,factoryMode=null;
  const outdoorLights=[ambient,hemisphere,key,rim].map(light=>({light,color:light.color.clone(),power:light.intensity})),dayFog=scene.fog.color.clone(),dayEnvironment=scene.environmentIntensity;
- const nightColors=[worldNight.ambient,'#bccbdf',worldNight.moon,'#9aaec9'].map(c=>new THREE.Color(c)),nightPowers=lowDetail?[.21,.11,.21,.09]:[.2,.3,.78,.24],nightFog=new THREE.Color(worldNight.fog);
- const deepColors=[deepNight.ambient,'#a8b8cc',deepNight.moon,'#8e9eb4'].map(c=>new THREE.Color(c)),deepPowers=lowDetail?[.16,.085,.17,.065]:[.14,.21,.52,.16],deepFog=new THREE.Color(deepNight.fog),dayNear=scene.fog.near,dayFar=scene.fog.far;
+ const nightColors=[worldNight.ambient,'#bccbdf',worldNight.moon,'#9aaec9'].map(c=>new THREE.Color(c)),nightPowers=lowDetail?[.24,.13,.25,.1]:[.25,.37,.9,.29],nightFog=new THREE.Color(worldNight.fog);
+ const deepColors=[deepNight.ambient,'#a8b8cc',deepNight.moon,'#8e9eb4'].map(c=>new THREE.Color(c)),deepPowers=lowDetail?[.19,.1,.2,.08]:[.19,.28,.68,.21],deepFog=new THREE.Color(deepNight.fog),dayNear=scene.fog.near,dayFar=scene.fog.far;
  const noonColors=[royalDay.ambient,'#dde9ef',royalDay.sun,'#c1d4e2'].map(c=>new THREE.Color(c)),noonPowers=lowDetail?[.28,.16,.6,.12]:[.24,.49,2.12,.35],noonFog=new THREE.Color(royalDay.fog),keyDayPosition=key.position.clone(),keyNoonPosition=new THREE.Vector3(-22,95,24);
  const dawnColors=[fairyDawn.ambient,'#d9dce9',fairyDawn.sun,'#b7c7db'].map(c=>new THREE.Color(c)),dawnFog=new THREE.Color(fairyDawn.fog),lateDawnFog=new THREE.Color(fairyDawn.lateFog),blendedDawnFog=new THREE.Color(),keyDawnPosition=new THREE.Vector3(-60,34,60);
  const cloudMaterials=[];scene.getObjectByName('floating-cloud-sea')?.traverse(o=>{if(o.material)cloudMaterials.push({material:o.material,color:o.material.color.clone()});});
