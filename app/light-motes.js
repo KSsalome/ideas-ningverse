@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import {seeded} from './art-kit.js';
 
 // 粒光｜Drifting motes of light above the seven islands.
-// One THREE.Points object = one draw call. Every mote rises, sways and
+// One THREE.Points object = one draw call. Every mote hovers, drifts and
 // twinkles inside the vertex shader, so the CPU only writes a few uniforms per
 // frame: no per-mote JavaScript, no buffer re-uploads, no extra render pass.
 // Palette follows the astral art style: ivory, gold and magic blue.
@@ -22,10 +22,10 @@ export function moteLayout(islands,count,seed=2026){
    // Uniform inside the island ellipse, slightly beyond the shore.
    const a=rng()*Math.PI*2,r=Math.sqrt(rng())*1.08;
    position[n*3]=island.x+Math.cos(a)*island.rx*r;
-   position[n*3+1]=island.height+.6+rng()*2;
+   position[n*3+1]=island.height+.8+rng()*9;
    position[n*3+2]=island.z+Math.sin(a)*island.rz*r;
-   // seed, rise height, rise speed, size
-   data[n*4]=rng()*1000;data[n*4+1]=7+rng()*9;data[n*4+2]=.18+rng()*.32;data[n*4+3]=rng()<.12?7+rng()*4:3+rng()*3.6;
+   // seed, hover radius, drift speed, size
+   data[n*4]=rng()*1000;data[n*4+1]=.8+rng()*1.6;data[n*4+2]=.35+rng()*.45;data[n*4+3]=rng()<.12?7+rng()*4:3+rng()*3.6;
    c.set(motePalette[Math.floor(rng()*motePalette.length)]);color[n*3]=c.r;color[n*3+1]=c.g;color[n*3+2]=c.b;
   }
  });
@@ -40,16 +40,18 @@ attribute vec4 aData;attribute vec3 aColor;
 uniform float uTime,uScale,uIntensity;
 varying vec3 vColor;varying float vAlpha;
 void main(){
- float seed=aData.x,rise=aData.y,speed=aData.z,size=aData.w;
- float cycle=fract(uTime*speed/rise+seed*.137);
+ float seed=aData.x,radius=aData.y,speed=aData.z,size=aData.w,t=uTime*speed;
+ // Hover in place: each mote wanders on its own slow loop, like dust in a
+ // beam of light, instead of rising away and respawning.
  vec3 p=position;
- p.y+=cycle*rise;
- p.x+=sin(uTime*.45+seed)*.9*cycle+sin(uTime*.9+seed*2.1)*.25;
- p.z+=cos(uTime*.38+seed*1.7)*.9*cycle;
+ p.x+=(sin(t*.7+seed)*.65+sin(t*.31+seed*2.3)*.35)*radius;
+ p.z+=(cos(t*.6+seed*1.3)*.65+cos(t*.27+seed*.7)*.35)*radius;
+ p.y+=(sin(t*.9+seed*3.1)*.6+sin(t*.43+seed)*.4)*radius*.7;
  vec4 mv=modelViewMatrix*vec4(p,1.);
  gl_Position=projectionMatrix*mv;
  float twinkle=.55+.45*sin(uTime*(1.3+fract(seed)*1.7)+seed*6.283);
- vAlpha=smoothstep(0.,.18,cycle)*(1.-smoothstep(.72,1.,cycle))*twinkle*uIntensity;
+ float breathe=.6+.4*sin(t*.23+seed*4.);
+ vAlpha=twinkle*breathe*uIntensity;
  vColor=aColor;
  gl_PointSize=size*uScale*(.75+.25*twinkle);
 }`;
@@ -70,7 +72,7 @@ export default function lightMotes({islands,limited=false,lowDetail=false,reduce
  geometry.setAttribute('position',new THREE.BufferAttribute(layout.position,3));
  geometry.setAttribute('aData',new THREE.BufferAttribute(layout.data,4));
  geometry.setAttribute('aColor',new THREE.BufferAttribute(layout.color,3));
- // Motes travel up to ~16 units above their base; a fixed sphere avoids per-frame bounds work.
+ // Motes hover up to ~12 units above the islands; a fixed sphere avoids per-frame bounds work.
  geometry.boundingSphere=new THREE.Sphere(new THREE.Vector3(0,12,0),140);
  const material=new THREE.ShaderMaterial({
   uniforms:{uTime:{value:0},uScale:{value:1},uIntensity:{value:.6}},

@@ -19,10 +19,15 @@ export function resolutionBudget({ratio,minRatio,fps=60}){
  let current=ratio,started=0,previous=null,total=0,count=0,changed=-Infinity;
  return{sample(now){if(previous!==null){const gap=now-previous;if(gap>0&&gap<500){total+=gap;count++;}}previous=now;if(!started)started=now;if(now-started<2000||count<20)return false;const average=total/count;started=now;total=count=0;if(average>1000/fps*1.35&&current>Math.min(ratio,minRatio)+.02){current=Math.max(Math.min(ratio,minRatio),current*.85);changed=now;return true;}if(average<1000/fps*1.12&&now-changed>20000&&current<ratio-.02){current=Math.min(ratio,current/.85);changed=now;return true;}return false;},reset(){previous=null;started=0;total=count=0;},get ratio(){return current;}};
 }
-export default function sceneBudget({container,renderer,svg=false}){
+// staticShadows: the shadow map is drawn once and kept; it is redrawn only
+// after invalidateShadow() (light or view moved), a resize, or a slow safety
+// refresh. Moving characters use contact shadows instead, so walking never
+// adds the cost of a full shadow pass to a frame.
+export const STATIC_SHADOW_REFRESH_MS=8000;
+export default function sceneBudget({container,renderer,svg=false,staticShadows=false}){
  const device=typeof navigator==='undefined'?{}:navigator,coarse=typeof matchMedia!=='undefined'&&matchMedia('(pointer: coarse)').matches;
  const quality=sceneProfile({width:container.clientWidth||1280,height:container.clientHeight||800,dpr:typeof devicePixelRatio==='undefined'?1:devicePixelRatio,coarse,memory:device.deviceMemory??8,cores:device.hardwareConcurrency??8});
- const gate=frameGate(svg?30:quality.fps),idleQuality=idleProfile(quality);let resolution=null,w=1,h=1,dirty=true,paused=false,lastDraw=-Infinity,lastShadow=-Infinity,lastMotion=-Infinity,idle=false,pendingSize=false,frames=0,svgInterval=0;listenForActivity();
+ const gate=frameGate(svg?30:quality.fps),idleQuality=idleProfile(quality);let resolution=null,w=1,h=1,dirty=true,paused=false,lastDraw=-Infinity,lastShadow=-Infinity,lastMotion=-Infinity,idle=false,shadowDirty=true,pendingSize=false,frames=0,svgInterval=0;listenForActivity();
  if(!svg&&renderer.shadowMap){
   renderer.shadowMap.autoUpdate=false;
   // Refraction is sampled through translucent materials. Keep the main
@@ -56,8 +61,8 @@ export default function sceneBudget({container,renderer,svg=false}){
   // The world and the sun are fixed while the camera pans or zooms, so the
    // shadow map only needs a full refresh when a caster (player, chick) moves.
    // Slow ambient animation (spinning armillaries, windmills) refreshes at 4Hz.
-   const updateShadow=!svg&&renderer.shadowMap&&now-lastShadow>=1000/(idle?idleQuality.shadowHz:castersMoving?quality.shadowHz:AMBIENT_SHADOW_HZ);
-  if(updateShadow){renderer.shadowMap.needsUpdate=true;lastShadow=now;}
+   const updateShadow=!svg&&!!renderer.shadowMap&&(staticShadows?(shadowDirty&&now-lastShadow>=250)||now-lastShadow>=STATIC_SHADOW_REFRESH_MS:shadowDirty||now-lastShadow>=1000/(idle?idleQuality.shadowHz:castersMoving?quality.shadowHz:AMBIENT_SHADOW_HZ));
+  if(updateShadow){renderer.shadowMap.needsUpdate=true;lastShadow=now;shadowDirty=false;}
   if(svg){
    const started=performance.now();
    effects.render(now);
@@ -66,7 +71,7 @@ export default function sceneBudget({container,renderer,svg=false}){
   }else effects.render(now,updateShadow);
   dirty=false;lastDraw=now;frames++;return true;
  }
- return{quality,step,resize,render,invalidate,invalidateShadow(){lastShadow=-Infinity;},get idle(){return idle;},stats(){return{renderer:svg?'svg':'webgl',targetFps:svg?null:quality.fps,pixelRatio:svg?1:renderer.getPixelRatio(),frames,idle,currentFps:svg?null:gate.fps,bloomHz:svg?0:quality.bloomHz,shadowHz:svg?0:idle?idleQuality.shadowHz:quality.shadowHz};}};
+ return{quality,step,resize,render,invalidate,invalidateShadow(){shadowDirty=true;},get idle(){return idle;},stats(){return{renderer:svg?'svg':'webgl',targetFps:svg?null:quality.fps,pixelRatio:svg?1:renderer.getPixelRatio(),frames,idle,currentFps:svg?null:gate.fps,bloomHz:svg?0:quality.bloomHz,shadowHz:svg?0:staticShadows?0:idle?idleQuality.shadowHz:quality.shadowHz,staticShadows};}};
 }
 
 // Rank nearby fixtures only while their lights can affect the scene. Crossing

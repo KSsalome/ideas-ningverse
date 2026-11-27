@@ -123,12 +123,32 @@ test('tiny props stop casting shadows but avatars keep theirs',async()=>{
  assert.equal(tiny.castShadow,false);assert.equal(tower.castShadow,true);assert.equal(hand.castShadow,true);
 });
 
-test('light atmosphere adds lamp pools, sun shafts and mist in three draw calls, faded by time of day',async()=>{
+test('light atmosphere adds lamp pools, sun shafts, mist and a cyber-only neon rim, faded by time of day',async()=>{
  const THREE=await import('three');const {default:lightAtmosphere,atmosphereLevels,collectLampPosts}=await import('../app/light-atmosphere.js');const {islands}=await import('../lib/archipelago.ts');
  const root=new THREE.Group();for(const [x,z]of [[0,0],[5,2],[5.3,2.2],[-8,4]]){const g=new THREE.Group();g.position.set(x,8,z);g.userData.lampPost={h:2.7};root.add(g);}
  assert.equal(collectLampPosts(root).length,3,'lamps closer than the spacing merge into one pool');
  const night=atmosphereLevels({night:1}),noon=atmosphereLevels({noon:1}),dawn=atmosphereLevels({dawn:1});
  assert.ok(night.pools>noon.pools*4,'lamp pools belong to the night');assert.ok(dawn.shafts>noon.shafts&&dawn.mist>noon.mist,'dawn has the strongest shafts and mist');
- const a=lightAtmosphere({root,islands});assert.equal(a.group.children.length,3);assert.ok(a.group.children.every(m=>m.isInstancedMesh&&!m.castShadow));assert.equal(a.lamps,3);
+ const a=lightAtmosphere({root,islands});assert.equal(a.group.children.length,4);assert.ok(a.group.children.every(m=>!m.castShadow));assert.equal(a.group.children.filter(m=>m.isInstancedMesh).length,3);assert.equal(a.lamps,3);
  assert.equal(lightAtmosphere({root,islands,lowDetail:true}).group,null);a.dispose();
+});
+
+test('static shadows are drawn once and only redrawn when invalidated or on the slow safety refresh',async()=>{
+ const {default:budgetFor,STATIC_SHADOW_REFRESH_MS}=await import('../app/scene-performance.js');
+ const renderer={ratio:1,domElement:{style:{}},shadowMap:{autoUpdate:true,needsUpdate:false},getPixelRatio(){return this.ratio;},setSize(){},setDrawingBufferSize(w,h,r){this.ratio=r;}};
+ const budget=budgetFor({container:{clientWidth:1280,clientHeight:800},renderer,staticShadows:true});budget.resize(1280,800);
+ const at=[];const effects={render(now,shadow){if(shadow)at.push(now);},resize(){}};
+ for(let now=0;now<4000;now+=1000/60){budget.step(now);budget.render(effects,now,{moving:true,castersMoving:true});if(Math.abs(now-2000)<8)budget.invalidateShadow();}
+ assert.equal(at.length,2,`walking does not redraw shadows: ${at}`);assert.ok(at[1]>=2000&&at[1]<2100);
+ for(let now=4000;now<STATIC_SHADOW_REFRESH_MS+2100;now+=1000/60){budget.step(now);budget.render(effects,now);}
+ assert.equal(at.length,3,'safety refresh');
+});
+
+test('characters get a contact shadow and leave the cached shadow map; cyber night lights the neon rim',async()=>{
+ const THREE=await import('three');const {default:lightAtmosphere,contactShadow}=await import('../app/light-atmosphere.js');const {islands}=await import('../lib/archipelago.ts');
+ const avatar=new THREE.Group(),body=new THREE.Mesh(new THREE.BoxGeometry(1,2,1));body.castShadow=true;avatar.add(body);
+ const blob=contactShadow(avatar);assert.equal(body.castShadow,false);assert.equal(blob.parent,avatar);assert.equal(blob.castShadow,false);
+ const a=lightAtmosphere({root:new THREE.Group(),islands});const ring=a.group.getObjectByName('cyber-neon-rim');
+ a.setTime({night:1});a.update(0);assert.equal(ring.visible,false,'no neon outside the cyber theme');
+ a.setTheme(1);for(let n=0;n<120;n++)a.update(n*16);assert.equal(ring.visible,true);a.dispose();
 });

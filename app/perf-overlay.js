@@ -26,7 +26,7 @@ export default function perfOverlay({renderer,budget,container}){
     `繪製次數 ${calls}（最高 ${peakCalls}）`,
     `三角面   ${Math.round(tris/1000)}k`,
     `解析度   ${st.pixelRatio?.toFixed?.(2)} × ${container.clientWidth}×${container.clientHeight}`,
-    `待機     ${st.idle?'是':'否'}　陰影 ${st.shadowHz}Hz`,
+    `待機     ${st.idle?'是':'否'}　陰影 ${st.staticShadows?'靜態快取':st.shadowHz+'Hz'}`,
    ].join('\n');
    windowStart=now;frames=0;worst=0;long=0;peakCalls=0;gaps.length=0;
   },

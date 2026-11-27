@@ -36,16 +36,16 @@ export default function homeArchitecture({root,castle,ornament,phase,lowDetail=f
   const mats=new Map();g.traverse(o=>{if(o.material){mats.set(o.material,{opacity:o.material.opacity,transparent:o.material.transparent,depthWrite:o.material.depthWrite});if(o.material.userData.bloom)o.castShadow=o.receiveShadow=false;}});overlays.push({g,mats,kind:kinds.find(kind=>name.includes(kind))});return g;
  }
  decoration('home-cyber-royal-devices',(k,g)=>{
-  const {box,cyl,cone,line,ring,group,mesh}=k,black=k.mat('#17283e','metal'),silver=k.mat('#8797ad','metal'),cyan=k.mat('#72d7e5','glow'),violet=k.mat('#b293df','glow'),pink=k.mat('#d695cd','glow');
+  const {box,cyl,cone,line,ring,group,mesh}=k,black=k.mat('#17283e','metal'),silver=k.mat('#8797ad','metal'),cyan=k.mat('#38f2ff','glow',{toneMapped:false}),violet=k.mat('#a86bff','glow',{toneMapped:false}),pink=k.mat('#ff4fd2','glow',{toneMapped:false});
   // Thin outlines follow the existing roofs and spires, rather than replacing
   // the castle with a second city or adding a new collider.
   for(const [x,y,z,r,h]of [[.35,16,-12.5,1.55,5.35],[-3.15,11.3,-12.1,.91,3.1],[3.25,12.4,-12.5,.79,2.6],[-2.7,6.1,-3.75,.96,2.45],[2.7,6.1,-3.75,.96,2.45]]){
-   for(let n=0;n<4;n++){const a=n/4*Math.PI*2+.785;line([[x+Math.sin(a)*r,y,z+Math.cos(a)*r],[x,y+h,z]],n%2?violet:cyan,g,.028);}
-   const rim=ring(r,.035,cyan,g,x,y,z);rim.rotation.x=Math.PI/2;
+   for(let n=0;n<4;n++){const a=n/4*Math.PI*2+.785;line([[x+Math.sin(a)*r,y,z+Math.cos(a)*r],[x,y+h,z]],n%2?violet:cyan,g,.05);}
+   const rim=ring(r,.06,cyan,g,x,y,z);rim.rotation.x=Math.PI/2;
   }
   for(const side of [-1,1]){
    for(const [x,y,z,h]of [[side*2.72,6.2,-8.64,4.7],[side*1.02,10.7,-11.49,10.3],[side*3.3,4.9,-3.02,1.65]])box(.045,h,.06,side<0?cyan:violet,g,x,y,z);
-   line([[side*1.02,4.8,-2.2],[side*1.02,6.7,-2.2],[0,7.8,-2.2]],side<0?cyan:pink,g,.04);
+   line([[side*1.02,4.8,-2.2],[side*1.02,6.7,-2.2],[0,7.8,-2.2]],side<0?cyan:pink,g,.065);
    const flag=group(g,side*4.4,8.1,-7);flag.name='home-holographic-banner';box(.045,3.4,.045,silver,flag,0,-1.1,0);box(1.05,2,.025,k.mat('#394d77','glow',{transparent:true,opacity:.26,depthWrite:false}),flag,side*.6,-.5,0);line([[side*.15,.5,.03],[side*1.1,.5,.03],[side*1.1,-1.5,.03],[side*.15,-1.5,.03]],side<0?cyan:pink,flag,.025);k.star(.3,cyan,flag,side*.6,-.5,.04);
    const device=group(g,side*7,0,7);device.name='home-royal-hologram-projector';cyl(.6,.75,.5,black,device,0,.25,0,8);const panel=mesh(new THREE.PlaneGeometry(1.5,1.9),k.mat('#78c6d8','glow',{transparent:true,opacity:.16,depthWrite:false}),device,0,2.05,0);panel.material.side=THREE.DoubleSide;line([[-.75,1.1,.02],[-.75,3,.02],[.75,3,.02],[.75,1.1,.02],[-.75,1.1,.02]],cyan,device,.025);k.star(.46,violet,device,0,2.05,.04);
   }

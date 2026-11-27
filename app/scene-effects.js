@@ -60,13 +60,16 @@ export default function sceneEffects({renderer,scene,camera,lowDetail=false,phas
  // The centre snaps to a coarse grid (a whole number of texels) so shadows
  // neither shimmer while panning nor force a shadow redraw every frame.
  const shadowCenter=new THREE.Vector3();let shadowRadius=interior?0:110;
+ // Static shadows need one redraw whenever the sun or moon has actually moved.
+ const lastKey=key.position.clone();let lightMoved=false;
  return{
   followShadow(target,view){
    if(interior||!key.castShadow)return false;
+   const moved=lightMoved;lightMoved=false;
    const halfW=(view.right-view.left)/2/view.zoom,halfH=(view.top-view.bottom)/2/view.zoom;
    const radius=Math.min(110,Math.max(24,Math.ceil(Math.max(halfW,halfH*1.8)*1.3/8)*8)),grid=radius/8;
    const x=Math.round(target.x/grid)*grid,z=Math.round(target.z/grid)*grid;
-   if(radius===shadowRadius&&x===shadowCenter.x&&z===shadowCenter.z)return false;
+   if(radius===shadowRadius&&x===shadowCenter.x&&z===shadowCenter.z)return moved;
    key.position.sub(shadowCenter);shadowCenter.set(x,0,z);key.position.add(shadowCenter);key.target.position.copy(shadowCenter);key.target.updateMatrixWorld();
    if(radius!==shadowRadius){shadowRadius=radius;Object.assign(key.shadow.camera,{left:-radius,right:radius,top:radius,bottom:-radius});key.shadow.camera.updateProjectionMatrix();}
    return true;
@@ -75,7 +78,7 @@ export default function sceneEffects({renderer,scene,camera,lowDetail=false,phas
    if(interior)return;mix=THREE.MathUtils.clamp(mix,0,1);depth=THREE.MathUtils.clamp(depth,0,mix);noon=THREE.MathUtils.clamp(noon,0,1-mix);dawn=THREE.MathUtils.clamp(dawn,0,1-mix-noon);progress=THREE.MathUtils.clamp(progress,0,1);const baseline=1-mix-noon-dawn,dawnPowers=lowDetail?[.22+progress*.04,.13+progress*.025,.3+progress*.15,.1]:[.17+progress*.03,.3+progress*.04,1.55+progress*.45,.32];
    for(const [n,b]of outdoorLights.entries()){const c=nightColors[n],d=deepColors[n],day=noonColors[n],morning=dawnColors[n];b.light.color.setRGB(b.color.r*baseline+c.r*(mix-depth)+d.r*depth+day.r*noon+morning.r*dawn,b.color.g*baseline+c.g*(mix-depth)+d.g*depth+day.g*noon+morning.g*dawn,b.color.b*baseline+c.b*(mix-depth)+d.b*depth+day.b*noon+morning.b*dawn);b.light.intensity=b.power*baseline+nightPowers[n]*(mix-depth)+deepPowers[n]*depth+noonPowers[n]*noon+dawnPowers[n]*dawn;}
    blendedDawnFog.copy(dawnFog).lerp(lateDawnFog,progress);const c=scene.fog.color;c.setRGB(dayFog.r*baseline+nightFog.r*(mix-depth)+deepFog.r*depth+noonFog.r*noon+blendedDawnFog.r*dawn,dayFog.g*baseline+nightFog.g*(mix-depth)+deepFog.g*depth+noonFog.g*noon+blendedDawnFog.g*dawn,dayFog.b*baseline+nightFog.b*(mix-depth)+deepFog.b*depth+noonFog.b*noon+blendedDawnFog.b*dawn);scene.fog.near=dayNear*baseline+dayNear*(mix-depth)+145*depth+205*noon+(170+progress*30)*dawn;scene.fog.far=dayFar*baseline+dayFar*(mix-depth)+335*depth+430*noon+(430+progress*40)*dawn;scene.environmentIntensity=dayEnvironment*baseline+.18*(mix-depth)+.12*depth+.32*noon+(.23+progress*.035)*dawn;
-   key.position.copy(keyDayPosition).multiplyScalar(1-noon-dawn).addScaledVector(keyNoonPosition,noon).addScaledVector(keyDawnPosition,dawn);key.position.y+=dawn*progress*10;key.position.add(shadowCenter);for(const b of cloudMaterials){b.material.color.copy(scene.fog.color);b.material.opacity=.38+depth*.04-.18*noon+dawn*(.045-progress*.02);}
+   key.position.copy(keyDayPosition).multiplyScalar(1-noon-dawn).addScaledVector(keyNoonPosition,noon).addScaledVector(keyDawnPosition,dawn);key.position.y+=dawn*progress*10;key.position.add(shadowCenter);if(lastKey.distanceToSquared(key.position)>.25){lastKey.copy(key.position);lightMoved=true;}for(const b of cloudMaterials){b.material.color.copy(scene.fog.color);b.material.opacity=.38+depth*.04-.18*noon+dawn*(.045-progress*.02);}
   },
   setLibraryLighting(state){if(!reading||libraryMode===state.mode)return;libraryMode=state.mode;ambient.color.set(state.ambient);hemisphere.color.set(state.light);key.color.set(state.light);key.intensity=lowDetail?.48:state.key;key.position.set(-2,17,4);key.target.position.set(0,1,-7);if(interiorLights[0]){interiorLights[0].color.set(state.light);interiorLights[0].intensity=state.fill;interiorLights[0].position.set(0,10.2,-5);}},
   setFactoryLighting(state){if(!bar||factoryMode===state.mode)return;factoryMode=state.mode;ambient.intensity=lowDetail?state.ambient*2.7:state.ambient;key.intensity=lowDetail?state.key*1.4:state.key;for(const light of interiorLights)light.intensity=light.userData.basePower*state.fill;},
