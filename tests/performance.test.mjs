@@ -102,7 +102,8 @@ test('light motes are a single GPU-animated draw call sized to the device',async
  assert.ok(moteIntensity({night:1})>moteIntensity({noon:1}));
  const motes=lightMotes({islands,limited:true});assert.ok(motes.points.isPoints);assert.equal(motes.points.geometry.attributes.position.count,moteCount({limited:true}));
  const t=motes.points.material.uniforms.uTime;motes.update(5000,{zoom:3,pixelRatio:1.25});assert.equal(t.value,5);
- const still=lightMotes({islands,reducedMotion:true});still.update(5000);assert.equal(still.points.material.uniforms.uTime.value,0,'reduced motion freezes drift');
+ const still=lightMotes({islands,reducedMotion:true});still.update(5000);assert.equal(still.points.material.uniforms.uTime.value,1,'reduced motion keeps a slow drift');
+ still.setRose(1);for(let n=0;n<200;n++)still.update(5000);assert.ok(still.points.material.uniforms.uRose.value>.95,'夜薔 turns the motes red and black');
  motes.dispose();still.dispose();
 });
 

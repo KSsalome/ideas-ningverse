@@ -25,7 +25,7 @@ export function moteLayout(islands,count,seed=2026){
    position[n*3+1]=island.height+.8+rng()*9;
    position[n*3+2]=island.z+Math.sin(a)*island.rz*r;
    // seed, hover radius, drift speed, size
-   data[n*4]=rng()*1000;data[n*4+1]=.8+rng()*1.6;data[n*4+2]=.35+rng()*.45;data[n*4+3]=rng()<.12?7+rng()*4:3+rng()*3.6;
+   data[n*4]=rng()*1000;data[n*4+1]=1.6+rng()*2.6;data[n*4+2]=.55+rng()*.6;data[n*4+3]=rng()<.12?7+rng()*4:3+rng()*3.6;
    c.set(motePalette[Math.floor(rng()*motePalette.length)]);color[n*3]=c.r;color[n*3+1]=c.g;color[n*3+2]=c.b;
   }
  });
@@ -37,8 +37,8 @@ export function moteIntensity({night=0,noon=0,dawn=0}={}){const base=Math.max(0,
 
 const vertexShader=`
 attribute vec4 aData;attribute vec3 aColor;
-uniform float uTime,uScale,uIntensity;
-varying vec3 vColor;varying float vAlpha;
+uniform float uTime,uScale,uIntensity,uRose;
+varying vec3 vColor;varying float vAlpha;varying float vDark;
 void main(){
  float seed=aData.x,radius=aData.y,speed=aData.z,size=aData.w,t=uTime*speed;
  // Hover in place: each mote wanders on its own slow loop, like dust in a
@@ -52,22 +52,32 @@ void main(){
  float twinkle=.55+.45*sin(uTime*(1.3+fract(seed)*1.7)+seed*6.283);
  float breathe=.6+.4*sin(t*.23+seed*4.);
  vAlpha=twinkle*breathe*uIntensity;
- vColor=aColor;
- gl_PointSize=size*uScale*(.75+.25*twinkle);
+ // 夜薔: embers of crimson and scarlet, and about a third of the motes turn
+ // into dark petals with a red rim that read as black against the glow.
+ float pick=fract(seed*.53);
+ vec3 rose=pick<.5?vec3(1.,.13,.2):pick<.8?vec3(.72,.02,.1):vec3(1.,.38,.24);
+ vColor=mix(aColor,rose,uRose);
+ vDark=uRose*step(fract(seed*.311),.36);
+ gl_PointSize=size*uScale*(.75+.25*twinkle)*(1.+uRose*.35);
+ vAlpha*=1.+uRose*.5;
 }`;
 const fragmentShader=`
-varying vec3 vColor;varying float vAlpha;
+uniform float uRose;varying vec3 vColor;varying float vAlpha;varying float vDark;
 void main(){
  vec2 d=gl_PointCoord-.5;float r=length(d)*2.;
  if(r>1.)discard;
  float glow=pow(1.-r,1.7),core=smoothstep(.3,0.,r);
  float a=(glow*.9+core*.8)*vAlpha;
- gl_FragColor=vec4(mix(vColor,vec3(1.),core*.55)*a,a);
+ vec3 light=mix(vColor,vec3(1.,.82,.8),core*mix(.55,.18,uRose)*(1.-vDark));
+ // Dark petals: a near-black body over the scene with a thin red rim.
+ float body=smoothstep(.75,.35,r)*vDark;
+ vec3 color=mix(light*a,vec3(.04,0.,.01)*.9+vColor*glow*.25,body);
+ gl_FragColor=vec4(color,body*vAlpha*.95);
 }`;
 
 export default function lightMotes({islands,limited=false,lowDetail=false,reducedMotion=false}){
  const count=moteCount({limited,lowDetail});
- if(!count)return{points:null,count:0,update(){},setTime(){},dispose(){}};
+ if(!count)return{points:null,count:0,update(){},setTime(){},setRose(){},dispose(){}};
  const layout=moteLayout(islands,count),geometry=new THREE.BufferGeometry();
  geometry.setAttribute('position',new THREE.BufferAttribute(layout.position,3));
  geometry.setAttribute('aData',new THREE.BufferAttribute(layout.data,4));
@@ -75,21 +85,26 @@ export default function lightMotes({islands,limited=false,lowDetail=false,reduce
  // Motes hover up to ~12 units above the islands; a fixed sphere avoids per-frame bounds work.
  geometry.boundingSphere=new THREE.Sphere(new THREE.Vector3(0,12,0),140);
  const material=new THREE.ShaderMaterial({
-  uniforms:{uTime:{value:0},uScale:{value:1},uIntensity:{value:.6}},
+  uniforms:{uTime:{value:0},uScale:{value:1},uIntensity:{value:.6},uRose:{value:0}},
   vertexShader,fragmentShader,transparent:true,depthWrite:false,depthTest:true,
-  // Premultiplied additive glow: works on the transparent canvas over the 2D sky layers.
-  blending:THREE.CustomBlending,blendSrc:THREE.OneFactor,blendDst:THREE.OneFactor,blendSrcAlpha:THREE.ZeroFactor,blendDstAlpha:THREE.OneFactor,
+  // Premultiplied blending: glow motes write alpha 0 (pure additive light);
+  // the dark rose petals write alpha and cover what is behind them.
+  blending:THREE.CustomBlending,blendSrc:THREE.OneFactor,blendDst:THREE.OneMinusSrcAlphaFactor,blendSrcAlpha:THREE.OneFactor,blendDstAlpha:THREE.OneMinusSrcAlphaFactor,
   fog:false,toneMapped:false,
  });
  const points=new THREE.Points(geometry,material);
  points.name='light-motes';points.frustumCulled=true;points.renderOrder=2;points.userData.dynamic=true;points.raycast=()=>{};
- let intensity=.6,target=.6;
+ let intensity=.6,target=.6,rose=0,roseTarget=0;
  return{
   points,count,
   setTime({night=0,noon=0,dawn=0}={}){target=moteIntensity({night,noon,dawn});},
+  // weight 0–1 of the 夜薔 (gothic) theme: red and black motes.
+  setRose(weight=0){roseTarget=weight;},
   // zoom: orthographic camera zoom; pixelRatio: renderer.getPixelRatio()
   update(now,{zoom=1,pixelRatio=1}={}){
-   if(!reducedMotion)material.uniforms.uTime.value=now/1000;
+   // Reduced motion keeps a very slow drift instead of freezing in place.
+   material.uniforms.uTime.value=now/1000*(reducedMotion?.2:1);
+   rose+=(roseTarget-rose)*.04;material.uniforms.uRose.value=rose;
    intensity+=(target-intensity)*.05;material.uniforms.uIntensity.value=intensity;
    material.uniforms.uScale.value=pixelRatio*THREE.MathUtils.clamp(.85+zoom*.3,1,3.6);
   },

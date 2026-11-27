@@ -34,14 +34,45 @@ export default function homeGarden({root,phase,lowDetail=false,nearBridge=()=>fa
    for(let n=0;n<(lowDetail?3:6);n++){const a=n*2.4,r=.55,fruit=k.mesh(coarse,phase==='industrial'?mat('#bd874d'):flower[n%2],t,Math.sin(a)*r,2.1+n%3*.3,Math.cos(a)*r),size=phase==='industrial'?.1:.16;fruit.scale.set(size,size*.7,size);}
   }
  }
+
+ // 夜薔｜Night Rose: in the gothic hours the island's trees give way to
+ // wild rose thickets and black briars. Same planting ring and footprint as
+ // the trees, so paths, bridges and colliders are unchanged.
+ const roseRed=mat('#c0182f','stone',lowDetail?{emissive:'#7a0a1c',emissiveIntensity:1}:{emissive:'#8a0c22',emissiveIntensity:.95}),roseDeep=mat('#6e0a1f','stone',{emissive:'#3d0410',emissiveIntensity:.8}),roseBud=mat('#e0233c','stone',lowDetail?{emissive:'#9e0e26',emissiveIntensity:1}:{emissive:'#b0122b',emissiveIntensity:1.05}),thorn=mat('#17101a','stone'),briarLeaf=mat('#1d2a24','stone');
+ function rose(parent,x,y,z,s=1,color=roseRed){
+  // Two offset petal layers read as a cupped rose from the isometric camera.
+  const outer=k.mesh(flowerGeometry,color,parent,x,y,z);outer.scale.set(.2*s,1,.2*s);outer.rotation.y=x*7;
+  const inner=k.mesh(flowerGeometry,roseDeep,parent,x,y+.035*s,z);inner.scale.set(.12*s,1.6,.12*s);inner.rotation.y=x*7+.31;
+  if(!lowDetail&&color===roseBud){const bud=k.mesh(coarse,roseBud,parent,x,y+.06*s,z);bud.scale.set(.055*s,.07*s,.055*s);}
+ }
+ function thornCurve(parent,x,z,height,lean,seed){
+  const r=seeded(seed),pts=[];let px=x,pz=z;for(let n=0;n<=4;n++){const t=n/4;px+=Math.cos(lean)*.22*t+(r()-.5)*.18;pz+=Math.sin(lean)*.22*t+(r()-.5)*.18;pts.push([px,height*t,pz]);}
+  // Low-poly cane (triangular cross-section) keeps the thicket light.
+  const cane=new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts.map(p=>new THREE.Vector3(...p))),5,.035,3,false),thorn);parent.add(cane);
+  if(!lowDetail)for(let n=1;n<4;n+=2){const [tx,ty,tz]=pts[n],spike=cone(.035,.16,thorn,parent,tx,ty,tz,3);spike.rotation.z=(n%2?1:-1)*1.25;spike.rotation.y=lean+n;}
+  return pts[pts.length-1];
+ }
+ function roseBush(x,z,size,seed){
+  const b=group(g,x,0,z);b.name='home-night-rose-bush';plantingCount++;const r=seeded(seed);
+  for(let n=0;n<3;n++){const a=n*2.1+r(),leafBall=ball(.42*size,n?briarLeaf:shade,b,Math.cos(a)*.3*size,.42*size+n*.1,Math.sin(a)*.3*size,1.15,.8,1.15);leafBall.geometry=coarse;}
+  for(let n=0;n<(lowDetail?3:5);n++){const a=n/5*Math.PI*2+r(),rr=(.32+r()*.25)*size;rose(b,Math.cos(a)*rr,.72*size+r()*.3*size,Math.sin(a)*rr,1.5*size,n%3?roseRed:roseBud);}
+  for(let n=0;n<(lowDetail?1:2);n++)thornCurve(b,(r()-.5)*.5,(r()-.5)*.5,1.1*size+r()*.5,r()*6.28,seed+n);
+ }
+ function briar(x,z,size,seed){
+  // A black thorn thicket: arching canes with a few roses caught at the tips.
+  const b=group(g,x,0,z);b.name='home-black-briar';plantingCount++;const r=seeded(seed);
+  ball(.38*size,thorn,b,0,.2,0,1.5,.45,1.5).geometry=coarse;
+  for(let n=0;n<(lowDetail?3:4);n++){const tip=thornCurve(b,(r()-.5)*.6,(r()-.5)*.6,(1.3+r()*1.1)*size,n/4*6.28+r(),seed*7+n);if(n%2===0)rose(b,tip[0],tip[1],tip[2],1.35*size,n%4?roseRed:roseBud);}
+ }
  for(let n=0;n<46;n++){
   const a=n/46*Math.PI*2,r=14+(n%3)*1.4,x=Math.sin(a)*r,z=Math.cos(a)*r;
   if(z<0&&Math.abs(x)<8.7||Math.abs(x)<3.2&&z>7||nearBridge(x,z,3.6))continue;
   const formal=phase==='medieval'||phase==='gothic',type=phase==='medieval'?(n%2?'round':'cypress'):formal?(n%5?'cypress':'round'):phase==='forest'?(n%5?'round':'cypress'):phase==='industrial'?(n%7?'round':'cypress'):phase==='wonder'?(n%3?'round':'cypress'):n%3?'cypress':'round';
   const scale=(phase==='forest'?1.02:phase==='wonder'?.76:phase==='industrial'?.68:phase==='cyber'?.75:.86)+(n%4)*.075;
-  planterTree(x,z,scale,type,n+18);
+  if(phase==='gothic'){if(n%3===1)briar(x,z,scale*1.1,n+18);else roseBush(x,z,scale*1.15,n+18);}
+  else planterTree(x,z,scale,type,n+18);
  }
- for(const [x,z,s]of [[-10,-5,.65],[10,-3,.7],[-7,12,.6],[7,12,.65]])planterTree(x,z,s,phase==='gothic'?'cypress':'round',Math.abs(x)*22);
+ for(const [x,z,s]of [[-10,-5,.65],[10,-3,.7],[-7,12,.6],[7,12,.65]]){if(phase==='gothic')briar(x,z,s*1.6,Math.abs(x)*22);else planterTree(x,z,s,'round',Math.abs(x)*22);}
  bed(-9,8,4,2.35,phase==='industrial'?'wood':'stone');bed(9,8,4,2.35,phase==='industrial'?'wood':'stone');
  for(const side of [-1,1]){bed(side*10,-1,2.5,1.2,phase==='industrial'?'wood':'stone');bed(side*7.5,12.5,2.2,1,phase==='industrial'?'wood':'stone');}
  if(phase==='medieval')for(const side of [-1,1]){
@@ -50,7 +81,7 @@ export default function homeGarden({root,phase,lowDetail=false,nearBridge=()=>fa
  }
  if(['forest','wonder','gothic'].includes(phase)){
   for(const [x,z,y,len]of [[-6.2,-5,3.8,2.8],[6.7,-7,3.6,2.7],[-5,-12,3.6,2.9],[4.2,-11.6,7.5,2.8],[-3.1,-9.4,8.6,2.2]]){
-   const v=ivy(g,x,y,z,len,Math.abs(x)*33);v.name='home-seasonal-climbing-vine';v.traverse(o=>{if(o.isMesh){o.material=phase==='wonder'?mat('#aebfa5'):phase==='gothic'?shade:leaf;if(o.geometry.type==='IcosahedronGeometry')o.geometry=coarse;}});
+   const v=ivy(g,x,y,z,len,Math.abs(x)*33);if(phase==='gothic')for(let n=0;n<3;n++)rose(g,x+(n-1)*.3,y-len*(.2+n*.25),z+.25,1.2,n%2?roseBud:roseRed);v.name='home-seasonal-climbing-vine';v.traverse(o=>{if(o.isMesh){o.material=phase==='wonder'?mat('#aebfa5'):phase==='gothic'?thorn:leaf;if(o.geometry.type==='IcosahedronGeometry')o.geometry=coarse;}});
   }
   for(let n=0;n<(lowDetail?18:32);n++){const a=random()*Math.PI*2,r=10+random()*5,x=Math.sin(a)*r,z=Math.cos(a)*r;if(nearBridge(x,z,3)||Math.abs(x)<3.5||z<0&&Math.abs(x)<9)continue;bloom(g,x,.03,z,flower[n%flower.length],n);}
  }

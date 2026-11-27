@@ -42,7 +42,7 @@ const poolVertex=`
 attribute float aSeed;varying vec2 vUv;varying float vSeed;
 void main(){vUv=uv;vSeed=aSeed;gl_Position=projectionMatrix*viewMatrix*modelMatrix*instanceMatrix*vec4(position,1.);}`;
 const poolFragment=`
-uniform float uLevel,uTime,uNeon;varying vec2 vUv;varying float vSeed;
+uniform float uLevel,uTime,uNeon,uRose;varying vec2 vUv;varying float vSeed;
 void main(){
  float r=length(vUv-.5)*2.;if(r>1.)discard;
  float flicker=.93+.07*sin(uTime*(2.1+fract(vSeed)*1.3)+vSeed*9.);
@@ -50,8 +50,8 @@ void main(){
  vec3 warm=mix(vec3(1.,.62,.28),vec3(1.,.86,.6),core);
  float pick=step(.5,fract(vSeed*.37));
  vec3 neon=mix(mix(vec3(.18,.92,1.),vec3(1.,.25,.82),pick),vec3(1.),core*.35);
- vec3 color=mix(warm,neon,uNeon);
- float a=(core*.85+halo)*uLevel*flicker*mix(.3,.42,uNeon);
+ vec3 color=mix(mix(warm,vec3(1.,.32,.3),uRose*.7),neon,uNeon);
+ float a=(core*.85+halo)*uLevel*flicker*mix(.3,.42,uNeon)*(1.-uRose*.3);
  gl_FragColor=vec4(color*a,a);
 }`;
 
@@ -100,14 +100,14 @@ function instanced(geometry,material,count,name){
 }
 
 export default function lightAtmosphere({root,islands,sun=new THREE.Vector3(-38,78,42),limited=false,lowDetail=false,reducedMotion=false}){
- if(lowDetail)return{group:null,lamps:0,update(){},setTime(){},setTheme(){},dispose(){}};
+ if(lowDetail)return{group:null,lamps:0,update(){},setTime(){},setTheme(){},setRose(){},dispose(){}};
  const group=new THREE.Group();group.name='light-atmosphere';group.userData.dynamic=true;
  const time={value:0},matrix=new THREE.Matrix4(),q=new THREE.Quaternion(),s=new THREE.Vector3(),p=new THREE.Vector3(),rng=seeded(77);
  const parts=[];
 
  // 1. Warm pools of lamplight on paths and plazas.
  const lamps=collectLampPosts(root,{limit:limited?200:320});
- const neon={value:0},poolUniforms={uLevel:{value:0},uTime:time,uNeon:neon};
+ const neon={value:0},roseWeight={value:0},poolUniforms={uLevel:{value:0},uTime:time,uNeon:neon,uRose:roseWeight};
  if(lamps.length){
   const geometry=new THREE.PlaneGeometry(1,1).rotateX(-Math.PI/2),pools=instanced(geometry,additive(poolUniforms,poolVertex,poolFragment),lamps.length,'lamp-light-pools');
   lamps.forEach((l,n)=>{p.set(l.x,l.y+.06,l.z);s.setScalar(6.4);matrix.compose(p,q.identity(),s);pools.setMatrixAt(n,matrix);});
@@ -147,17 +147,19 @@ void main(){
 }`));
  ring.name='cyber-neon-rim';ring.position.set(home.x,home.height+.12,home.z);ring.scale.set(home.rx*1.01,1,home.rz*1.01);ring.renderOrder=2;ring.raycast=()=>{};ring.visible=false;group.add(ring);parts.push(ring);
 
- const target={pools:0,shafts:.5,mist:.3,neon:0},current={...target},warm=new THREE.Color(),mistNight=new THREE.Color('#8aa0d6'),mistDawn=new THREE.Color('#f3d9e6'),mistDay=new THREE.Color('#eef2f6');
+ const target={pools:0,shafts:.5,mist:.3,neon:0,rose:0},current={...target},warm=new THREE.Color(),mistNight=new THREE.Color('#8aa0d6'),mistRose=new THREE.Color('#a8324a'),mistBase=new THREE.Color('#eef2f6'),mistDawn=new THREE.Color('#f3d9e6'),mistDay=new THREE.Color('#eef2f6');
  return{
   group,lamps:lamps.length,
   // weight 0–1: how much of the cyberpunk night theme is showing.
   setTheme(weight=0){target.neon=weight;},
+  // weight 0–1 of 夜薔: crimson lamplight and a faint red mist.
+  setRose(weight=0){target.rose=weight;},
   setTime(state={}){Object.assign(target,atmosphereLevels(state));shaftColor(state,warm);shaftUniforms.uColor.value.copy(warm);
-   const {night=0,dawn=0}=state;mistUniforms.uColor.value.copy(mistDay).lerp(mistDawn,dawn).lerp(mistNight,night);},
+   const {night=0,dawn=0}=state;mistBase.copy(mistDay).lerp(mistDawn,dawn).lerp(mistNight,night);mistUniforms.uColor.value.copy(mistBase);},
   update(now){
    if(!reducedMotion)time.value=now/1000;
-   for(const key of ['pools','shafts','mist','neon'])current[key]+=(target[key]-current[key])*.06;
-   neon.value=current.neon;ringUniforms.uLevel.value=current.neon*Math.max(current.pools,.35);ring.visible=ringUniforms.uLevel.value>.01;
+   for(const key of ['pools','shafts','mist','neon','rose'])current[key]+=(target[key]-current[key])*.06;
+   neon.value=current.neon;roseWeight.value=current.rose;mistUniforms.uColor.value.copy(mistBase).lerp(mistRose,current.rose*.4);ringUniforms.uLevel.value=current.neon*Math.max(current.pools,.35);ring.visible=ringUniforms.uLevel.value>.01;
    poolUniforms.uLevel.value=current.pools;shaftUniforms.uLevel.value=current.shafts;mistUniforms.uLevel.value=current.mist;
   },
   dispose(){group.removeFromParent();for(const m of parts){m.geometry.dispose();m.material.dispose();if(m.isInstancedMesh)m.dispose();}},
